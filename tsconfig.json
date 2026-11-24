@@ -7,6 +7,8 @@
       "@praxis/approvals/http": ["./packages/approvals/src/http.ts"],
       "@praxis/contracts": ["./packages/contracts/src/index.ts"],
       "@praxis/hermes-runtime": ["./packages/hermes-runtime/src/index.ts"],
+      "@praxis/kanban": ["./packages/kanban/src/index.ts"],
+      "@praxis/kanban/http": ["./packages/kanban/src/http.ts"],
       "@praxis/mcp": ["./packages/mcp/src/index.ts"],
       "@praxis/settings": ["./packages/settings/src/index.ts"],
       "@praxis/settings/http": ["./packages/settings/src/http.ts"],

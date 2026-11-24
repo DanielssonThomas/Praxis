@@ -7,8 +7,9 @@
   <link rel="stylesheet" href="/assets/shell.css">
   <script type="module" src="/assets/shell.js"></script>
   <script type="module" src="/assets/activity.js"></script>
+  <script type="module" src="/assets/kanban.js"></script>
 </head>
-<body data-activity="unavailable">
+<body data-activity="unavailable" data-kanban="unavailable">
   <header id="shell-header">
     <div class="header-row">
       <span class="brand">Praxis</span>
@@ -20,6 +21,7 @@
     <nav id="main-nav" aria-label="Main navigation" hidden>
       <a href="#manager" data-route="manager">Manager</a>
       <a href="#overview" data-route="overview">Overview</a>
+      <a href="#kanban" data-route="kanban">Kanban</a>
       <a href="#settings" data-route="settings">Settings</a>
     </nav>
   </header>
@@ -29,6 +31,22 @@
     </section>
     <section class="view" data-view="overview" aria-labelledby="overview-title" hidden>
       <h1 id="overview-title">Overview</h1>
+    </section>
+    <section class="view" data-view="kanban" aria-labelledby="kanban-title" hidden>
+      <div class="kanban-heading">
+        <h1 id="kanban-title">Kanban</h1>
+        <div class="header-actions">
+          <button id="kanban-refresh" type="button" hidden>Refresh board</button>
+          <button id="kanban-lock" type="button" hidden>Lock board</button>
+        </div>
+      </div>
+      <form id="kanban-auth" aria-label="Open Kanban" autocomplete="off" hidden>
+        <label>Operator token <input type="password" name="operatorToken" required></label>
+        <button type="submit">Open board</button>
+      </form>
+      <p id="kanban-status" role="status">Configure the local Hermes board to view its tasks.</p>
+      <p id="kanban-provider" hidden></p>
+      <div id="kanban-columns"></div>
     </section>
     <section class="view settings-view" data-view="settings" aria-label="Settings" hidden>
       <iframe id="settings-frame" title="Praxis settings"></iframe>

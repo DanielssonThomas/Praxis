@@ -116,6 +116,16 @@ export type ActionLifecycle = z.infer<typeof actionLifecycleSchema>;
 
 export const workerReportPhaseSchema = z.enum(["progress", "result", "blocked"]);
 export const workerReportMessageSchema = nonblankText.max(8_192);
+export const githubIssueReferenceSchema = z.strictObject({
+  provider: z.literal("github"),
+  repository: z.string()
+    .regex(/^[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9._-]{1,100}$/i)
+    .toLowerCase()
+    .refine((value) => !value.endsWith("/.") && !value.endsWith("/..")),
+  number: z.int().positive(),
+});
+export type GitHubIssueReference = z.infer<typeof githubIssueReferenceSchema>;
+
 const workerReportKind = z.templateLiteral(["worker.", workerReportPhaseSchema]);
 const eventDetailsSchema = z.discriminatedUnion("type", [
   z.strictObject({
@@ -134,6 +144,7 @@ const eventDetailsSchema = z.discriminatedUnion("type", [
     actionId: actionIdSchema,
     transition: actionLifecycleSchema,
   }),
+  z.strictObject({ type: z.literal("issue_link"), issue: githubIssueReferenceSchema }),
 ]);
 
 export const eventSchema = z.strictObject({
@@ -160,6 +171,9 @@ export const eventSchema = z.strictObject({
   if (details?.type === "action_lifecycle" && (kind !== `action.${details.transition.stage}`
     || subject.kind !== "action" || subject.id !== details.actionId)) {
     context.addIssue({ code: "custom", path: ["details"], message: "Action lifecycle details require their exact action and stage" });
+  }
+  if (details?.type === "issue_link" && (kind !== "task.issue_linked" || subject.kind !== "task")) {
+    context.addIssue({ code: "custom", path: ["details"], message: "An issue link requires the task subject it links to" });
   }
 });
 export type Event = z.infer<typeof eventSchema>;

@@ -17,9 +17,9 @@ function send(response: ServerResponse, status: number, value: unknown): void {
   response.end(JSON.stringify(value));
 }
 
-async function bodyOf(request: IncomingMessage): Promise<unknown> {
+export async function readOperatorJson(request: IncomingMessage): Promise<unknown> {
   if (request.headers["content-type"]?.split(";")[0].trim().toLowerCase() !== "application/json") {
-    throw new ApprovalError("invalid_input", "Send the activity request as JSON.");
+    throw new ApprovalError("invalid_input", "Send the request as JSON.");
   }
   const chunks: Buffer[] = [];
   let length = 0;
@@ -28,28 +28,45 @@ async function bodyOf(request: IncomingMessage): Promise<unknown> {
     length += bytes.length;
     if (length > 4_096) {
       request.resume();
-      throw new ApprovalError("invalid_input", "The activity request is too large.");
+      throw new ApprovalError("invalid_input", "The request is too large.");
     }
     chunks.push(bytes);
   }
   try {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } catch {
-    throw new ApprovalError("invalid_input", "The activity request must contain valid JSON.");
+    throw new ApprovalError("invalid_input", "The request must contain valid JSON.");
   }
+}
+
+export function localOperatorGuard(digest: string) {
+  if (!/^[a-f0-9]{64}$/.test(digest)) throw new Error("Configure a lowercase SHA-256 operator token digest.");
+  const expected = Buffer.from(digest, "hex");
+  return (request: IncomingMessage): { status: number; error: string } | undefined => {
+    const local = new URL(`http://127.0.0.1:${request.socket.localPort}`);
+    const sameOrigin = request.headers.origin === local.origin;
+    if (request.socket.localAddress !== "127.0.0.1" || request.headers.host !== local.host
+      || (!sameOrigin && (request.method === "POST" || request.headers.origin !== undefined))) {
+      return { status: 403, error: "Use the local Praxis operator interface." };
+    }
+    const token = /^Bearer ([A-Za-z0-9._~-]{32,256})$/i.exec(request.headers.authorization ?? "")?.[1];
+    if (!token || !timingSafeEqual(createHash("sha256").update(token).digest(), expected)) {
+      return { status: 401, error: "An operator credential is required." };
+    }
+  };
 }
 
 export async function approvalRoutesFromEnv() {
   const digest = process.env.PRAXIS_OPERATOR_TOKEN_DIGEST;
-  if (digest === undefined) return;
   const authorityFile = process.env.PRAXIS_MCP_CONFIG_FILE;
   const origin = process.env.PRAXIS_HERMES_ORIGIN;
   const apiKey = process.env.PRAXIS_HERMES_API_KEY;
-  if (!/^[a-f0-9]{64}$/.test(digest) || !authorityFile || !origin || !apiKey) {
+  if (digest === undefined || (!origin && !apiKey)) return;
+  if (!authorityFile || !origin || !apiKey) {
     throw new Error("Configure the operator token digest, MCP authority file and local Hermes credentials for activity.");
   }
 
-  const operator = Buffer.from(digest, "hex");
+  const operator = localOperatorGuard(digest);
   const load = async () => mcpAuthoritySchema.parse(JSON.parse(await readFile(authorityFile, "utf8")));
   const initial = await load();
   const runtime = new HermesRuntime({ origin, apiKey });
@@ -74,16 +91,9 @@ export async function approvalRoutesFromEnv() {
     const path = request.url ?? "";
     if (!routes.has(path)) return false;
 
-    const local = new URL(`http://127.0.0.1:${request.socket.localPort}`);
-    const sameOrigin = request.headers.origin === local.origin;
-    if (request.socket.localAddress !== "127.0.0.1" || request.headers.host !== local.host
-      || (!sameOrigin && (request.method === "POST" || request.headers.origin !== undefined))) {
-      send(response, 403, { error: "Use the local Praxis operator interface." });
-      return true;
-    }
-    const token = /^Bearer ([A-Za-z0-9._~-]{32,256})$/i.exec(request.headers.authorization ?? "")?.[1];
-    if (!token || !timingSafeEqual(createHash("sha256").update(token).digest(), operator)) {
-      send(response, 401, { error: "An operator credential is required." });
+    const denied = operator(request);
+    if (denied !== undefined) {
+      send(response, denied.status, { error: denied.error });
       return true;
     }
 
@@ -91,11 +101,11 @@ export async function approvalRoutesFromEnv() {
       if (path === route && request.method === "GET") {
         send(response, 200, await service.list());
       } else if (path === `${route}/inspect` && request.method === "POST") {
-        const input = inspectInput.safeParse(await bodyOf(request));
+        const input = inspectInput.safeParse(await readOperatorJson(request));
         if (!input.success) throw new ApprovalError("invalid_input", "Supply an exact action request ID.");
         send(response, 200, await service.inspect(input.data.requestId));
       } else if (path === `${route}/decision` && request.method === "POST") {
-        send(response, 200, await service.decide(await bodyOf(request)));
+        send(response, 200, await service.decide(await readOperatorJson(request)));
       } else {
         response.setHeader("Allow", path === route ? "GET" : "POST");
         send(response, 405, { error: "This activity route does not support that method." });

@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { approvalRoutesFromEnv } from "@praxis/approvals/http";
+import { kanbanRoutesFromEnv } from "@praxis/kanban/http";
 import { settingsPath } from "@praxis/settings";
 import { serveSettings } from "@praxis/settings/http";
 
@@ -12,16 +13,19 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) {
 
 const config = settingsPath();
 const activity = await approvalRoutesFromEnv();
+const kanban = await kanbanRoutesFromEnv();
 const assets = new Map([
   ["/", { url: new URL("../web/index.html", import.meta.url), type: "text/html; charset=utf-8" }],
   ["/assets/shell.css", { url: new URL("../web/shell.css", import.meta.url), type: "text/css; charset=utf-8" }],
   ["/assets/shell.js", { url: new URL("./browser.js", import.meta.url), type: "text/javascript; charset=utf-8" }],
   ["/assets/activity.js", { url: new URL("./activity.js", import.meta.url), type: "text/javascript; charset=utf-8" }],
+  ["/assets/kanban.js", { url: new URL("./kanban.js", import.meta.url), type: "text/javascript; charset=utf-8" }],
 ]);
 
 async function serve(request: IncomingMessage, response: ServerResponse): Promise<void> {
   if (await serveSettings(request, response, config)) return;
   if (await activity?.serve(request, response)) return;
+  if (await kanban?.serve(request, response)) return;
   const path = request.url?.split("?")[0] ?? "";
   const asset = assets.get(path);
   if (asset === undefined) {
@@ -33,8 +37,10 @@ async function serve(request: IncomingMessage, response: ServerResponse): Promis
     return;
   }
   const body = await readFile(asset.url);
-  const payload = path === "/" && activity !== undefined
-    ? body.toString("utf8").replace('data-activity="unavailable"', 'data-activity="available"')
+  const payload = path === "/"
+    ? body.toString("utf8")
+      .replace('data-activity="unavailable"', `data-activity="${activity === undefined ? "unavailable" : "available"}"`)
+      .replace('data-kanban="unavailable"', `data-kanban="${kanban === undefined ? "unavailable" : "available"}"`)
     : body;
   response.writeHead(200, {
     "Content-Type": asset.type,
@@ -50,7 +56,10 @@ const server = createServer((request, response) => {
     else response.writeHead(500).end("Praxis is unavailable.");
   });
 });
-server.once("close", () => { void activity?.close(); });
+server.once("close", () => {
+  void activity?.close();
+  kanban?.close();
+});
 server.listen(port, "127.0.0.1", () => {
   const address = server.address();
   if (address !== null && typeof address !== "string") {
