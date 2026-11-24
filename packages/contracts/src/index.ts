@@ -37,6 +37,32 @@ export const sessionSchema = z.strictObject({
 });
 export type Session = z.infer<typeof sessionSchema>;
 
+export const runtimeSessionStatusSchema = z.enum([
+  "queued", "running", "waiting_for_approval", "stopping", "stopped",
+  "completed", "failed", "interrupted", "unknown",
+]);
+export type RuntimeSessionStatus = z.infer<typeof runtimeSessionStatusSchema>;
+
+export const runtimeOutputLimit = 16_384;
+export const runtimeOutputSchema = z.discriminatedUnion("availability", [
+  z.strictObject({
+    availability: z.literal("available"),
+    text: z.string().max(runtimeOutputLimit),
+    truncated: z.boolean(),
+  }),
+  z.strictObject({ availability: z.literal("unavailable"), reason: nonblankText }),
+]);
+export type RuntimeOutput = z.infer<typeof runtimeOutputSchema>;
+
+export const runtimeSessionSnapshotSchema = z.strictObject({
+  ...version,
+  taskId: taskIdSchema,
+  sessionId: sessionIdSchema,
+  status: runtimeSessionStatusSchema,
+  output: runtimeOutputSchema,
+});
+export type RuntimeSessionSnapshot = z.infer<typeof runtimeSessionSnapshotSchema>;
+
 const taskReference = z.strictObject({ kind: z.literal("task"), id: taskIdSchema });
 const sessionReference = z.strictObject({ kind: z.literal("session"), id: sessionIdSchema });
 const actionReference = z.strictObject({ kind: z.literal("action"), id: actionIdSchema });

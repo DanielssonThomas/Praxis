@@ -4,7 +4,7 @@
 
 Praxis uses Node.js 24 and TypeScript for its local application, npm workspaces to share packages, and a locked dependency graph. Start with a browser desktop surface served by a local Node process. Browser-native HTML, CSS and TypeScript are sufficient for the application shell. Package the local host and UI together for v1 setup, targeting Linux first for verification. Release packaging and other OS support depend on the evidence in [#24](https://github.com/DanielssonThomas/Praxis/issues/24).
 
-The local host will listen on loopback and own credentials and operational storage outside the browser. The browser renders local state and sends requests to that host. Hermes runs separately and owns orchestration, dispatch and native session lifecycles. Closing the browser should leave Hermes work running. The Hermes adapter maps native identifiers and capabilities into Praxis records and must demonstrate this boundary in [#5](https://github.com/DanielssonThomas/Praxis/issues/5).
+The local host listens on loopback and owns credentials and operational storage outside the browser. The browser renders local state and sends requests to that host. Hermes runs separately and owns orchestration, dispatch and native session lifecycles. The [Hermes runtime adapter](hermes-runtime.md) maps native run identifiers and capabilities into Praxis session snapshots. Closing Praxis leaves Hermes work running.
 
 ## Shared contracts
 
@@ -14,7 +14,7 @@ The contracts cover Praxis operational records. Axiom owns task briefs, effectiv
 
 | Area | Owner |
 | --- | --- |
-| Record identity and versioning | Shared contracts package |
+| Record identity, versioning and runtime snapshots | Shared contracts package |
 | Native execution and identifiers | Hermes and its Praxis adapter |
 | Local persistence, references and event replay | [Local state store](operational-state.md) |
 | Approval semantics and execution authorization | Approval and execution services |
