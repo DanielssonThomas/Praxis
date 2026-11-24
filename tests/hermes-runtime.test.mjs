@@ -13,10 +13,14 @@ const runId = "run_fixture123";
 async function fixture(t, options = {}) {
   const calls = [];
   const prefix = options.profile ? `/p/${options.profile}` : "";
+  const admissions = new Map();
+  const receipts = new Map();
   let sessionId;
   let status = options.status ?? "running";
   const server = createServer(async (request, response) => {
-    const path = request.url.startsWith(prefix + "/") ? request.url.slice(prefix.length) : undefined;
+    const routePrefix = options.defaultAlias && request.url.startsWith("/p/default/") ? "/p/default" : prefix;
+    const path = request.url.startsWith(routePrefix + "/") ? request.url.slice(routePrefix.length) : undefined;
+    const transcriptId = /^\/api\/sessions\/([^/]+)\/messages\?/.exec(path ?? "")?.[1];
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
     const body = chunks.length === 0 ? undefined : JSON.parse(Buffer.concat(chunks).toString());
@@ -33,6 +37,23 @@ async function fixture(t, options = {}) {
         auth: { type: "bearer", required: true },
         features: { run_submission: true, run_status: true, run_stop: true, ...options.features },
       });
+    } else if (options.turns && path === "/v1/runs" && request.method === "POST") {
+      const identity = request.headers["idempotency-key"];
+      const admitted = admissions.get(identity);
+      if (admitted && JSON.stringify(admitted.body) !== JSON.stringify(body)) {
+        send(409, { error: { code: "idempotency_key_conflict" } });
+      } else if (admitted) {
+        send(202, { run_id: admitted.runId });
+      } else {
+        const id = `run_fixture_turn_${admissions.size}`;
+        admissions.set(identity, { body, runId: id });
+        receipts.set(id, {
+          run_id: id, session_id: body.session_id, status: options.status ?? "completed", output: body.input,
+        });
+        send(202, { run_id: id });
+      }
+    } else if (options.turns && request.method === "GET" && path?.startsWith("/v1/runs/") && receipts.has(path.slice("/v1/runs/".length))) {
+      send(200, receipts.get(path.slice("/v1/runs/".length)));
     } else if (path === "/v1/runs" && request.method === "POST") {
       sessionId = body.session_id;
       send(202, { run_id: runId, status: "started" });
@@ -47,12 +68,13 @@ async function fixture(t, options = {}) {
       response.end(`id: 1\ndata: ${data}\n\n`);
     } else if (options.features?.run_steer && path === `/v1/runs/${runId}/steer` && request.method === "POST") {
       send(200, { run_id: runId, accepted: true });
-    } else if (options.transcript && path?.startsWith(`/api/sessions/${sessionId}/messages?`)) {
+    } else if (options.transcript && transcriptId !== undefined && (transcriptId === sessionId
+      || [...receipts.values()].some((receipt) => receipt.session_id === transcriptId))) {
       const query = new URL(path, "http://127.0.0.1").searchParams;
       const limit = Number(query.get("limit"));
       const offset = Number(query.get("offset") ?? "0");
       const data = options.transcript(limit, offset);
-      send(200, { session_id: sessionId, data, pagination: { limit, offset, order: "latest", returned: data.length } });
+      send(200, { session_id: transcriptId, data, pagination: { limit, offset, order: "latest", returned: data.length } });
     } else {
       send(404, { message: "unknown fixture route" });
     }
@@ -230,4 +252,89 @@ test("the named profile bearer stays on the configured route when it returns a r
   assert.deepEqual(calls.map(({ path, headers }) => [path, headers.authorization]), [
     ["/p/praxis-manager/v1/capabilities", `Bearer ${key}`],
   ]);
+});
+
+
+test("named explicit turns share a scoped native session and keep legacy assignments compatible", async (t) => {
+  const profile = "praxis-manager";
+  const base = `/p/${profile}`;
+  const guidance = "Scoped guidance.";
+  const transcript = () => [{ id: 7, role: "user", content: guidance }];
+  const { adapter, calls, origin } = await fixture(t, { profile, turns: true, transcript });
+  const reconnected = new HermesRuntime({ origin: origin + base + "/", apiKey: key });
+  const nativeSession = `praxis-${createHash("sha256").update(session.taskId).update("\0").update(session.id).digest("hex")}`;
+
+  const legacy = await adapter.createAssignment(session, "Initial turn");
+  assert.deepEqual(await reconnected.createAssignment(session, "Initial turn"), legacy);
+  const legacyReference = JSON.parse(JSON.stringify(legacy));
+  const turn = await adapter.submitTurn(session, "Follow-up", "turn_fixture_A");
+  const retry = await reconnected.submitTurn(session, "Follow-up", "turn_fixture_A");
+  assert.deepEqual(retry, turn);
+  const next = await adapter.submitTurn(session, "Follow-up", "B".repeat(128));
+  const otherSession = { ...session, id: "session_other" };
+  const otherTask = { ...session, taskId: "task_other" };
+  const differentSession = await adapter.submitTurn(otherSession, "Follow-up", "turn_fixture_A");
+  const differentTask = await adapter.submitTurn(otherTask, "Follow-up", "turn_fixture_A");
+  await assert.rejects(reconnected.submitTurn(session, "Changed input", "turn_fixture_A"), {
+    code: "native_refused", message: /HTTP 409/,
+  });
+
+  assert.deepEqual(turn, { ...legacy, runId: turn.runId });
+  assert.equal(new Set([legacy, turn, next, differentSession, differentTask].map(({ runId }) => runId)).size, 5);
+  assert.equal((await reconnected.inspectAssignment(legacyReference)).output.text, "Initial turn");
+  assert.equal((await reconnected.inspectAssignment(turn)).output.text, "Follow-up");
+  await assert.rejects(reconnected.inspectAssignment({ ...turn, sessionId: otherSession.id }), { code: "assignment_mismatch" });
+  await assert.rejects(reconnected.inspectAssignment({ ...turn, taskId: otherTask.taskId }), { code: "assignment_mismatch" });
+
+  const submissions = calls.filter(({ method, path }) => method === "POST" && path === base + "/v1/runs");
+  assert.equal(submissions.length, 8);
+  const sessionIds = submissions.map(({ body }) => body.session_id);
+  assert.ok(sessionIds.slice(0, 2).every((id) => id === nativeSession));
+  const scopedSession = sessionIds[2];
+  assert.ok([...sessionIds.slice(2, 5), sessionIds[7]].every((id) => id === scopedSession));
+  assert.equal(new Set([nativeSession, scopedSession, sessionIds[5], sessionIds[6]]).size, 4);
+
+  const digest = createHash("sha256").update(guidance).digest("hex");
+  assert.equal(await adapter.reconcileGuidance(legacyReference, 0, digest), "recorded");
+  assert.equal(await adapter.reconcileGuidance(turn, 0, digest), "recorded");
+  const transcripts = calls.filter(({ path }) => path.startsWith(base + "/api/sessions/"));
+  assert.deepEqual(transcripts.map(({ path }) => path.split("/")[5]), [nativeSession, scopedSession]);
+  const keys = submissions.map(({ headers }) => headers["idempotency-key"]);
+  assert.equal(keys[0], nativeSession);
+  assert.equal(keys[1], nativeSession);
+  assert.equal(keys[2], keys[3]);
+  assert.equal(keys[2], keys[7]);
+  assert.equal(new Set([keys[0], keys[2], keys[4], keys[5], keys[6]]).size, 5);
+  assert.ok(keys.every((value) => /^[!-~]{1,255}$/.test(value)));
+  assert.ok(calls.every(({ path, headers }) => path.startsWith(base + "/") && headers.authorization === `Bearer ${key}`));
+
+  const wrongProfile = await fixture(t, { profile: "other-profile", foreignSession: scopedSession });
+  const wrongAssignment = await wrongProfile.adapter.createAssignment(session, "Fixture");
+  await assert.rejects(wrongProfile.adapter.inspectAssignment(wrongAssignment), { code: "assignment_mismatch" });
+});
+
+test("submitTurn rejects invalid caller identities before calling the gateway", async (t) => {
+  const { adapter, calls } = await fixture(t, { turns: true });
+  for (const identity of [undefined, null, 1, "", " turn", "a b", "_turn", "turn/other", "turn\n", "turn\u0000", "x".repeat(129)]) {
+    await assert.rejects(adapter.submitTurn(session, "Fixture", identity), { code: "invalid_input" });
+  }
+  assert.deepEqual(calls, []);
+});
+
+
+test("default aliases share an idempotency namespace and the exact native guidance transcript", async (t) => {
+  const { adapter, calls, origin } = await fixture(t, {
+    turns: true, defaultAlias: true, status: "running",
+    features: { run_steer: true, session_resources: true },
+    transcript: () => [{ id: 9, role: "user", content: "Fixture guidance" }],
+  });
+  const explicitDefault = new HermesRuntime({ origin: origin + "/p/default", apiKey: key });
+  const bare = await adapter.submitTurn(session, "Fixture", "stable-turn");
+  assert.deepEqual(await explicitDefault.submitTurn(session, "Fixture", "stable-turn"), bare);
+  const submissions = calls.filter(({ method }) => method === "POST");
+  assert.deepEqual(submissions[0].body, submissions[1].body);
+  assert.equal(submissions[0].headers["idempotency-key"], submissions[1].headers["idempotency-key"]);
+  assert.equal(await explicitDefault.guidanceBaseline(bare), 9);
+  assert.equal(calls.at(-1).path,
+    `/p/default/api/sessions/${submissions[0].body.session_id}/messages?limit=1&offset=0&order=latest&include_compacted=true`);
 });
