@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@praxis/approvals": "0.1.0",
+    "@praxis/kanban": "0.1.0",
     "@praxis/settings": "0.1.0"
   },
   "devDependencies": {

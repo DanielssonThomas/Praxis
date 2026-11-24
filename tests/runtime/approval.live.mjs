@@ -103,7 +103,7 @@ test("the Praxis browser authorizes one real Hermes stop and denial preserves an
   page.setDefaultTimeout(6_000);
   await page.goto(shell.origin);
   await page.getByRole("button", { name: "Activity", exact: true }).click();
-  const token = page.getByLabel("Operator token");
+  const token = page.getByRole("complementary", { name: "Activity" }).getByLabel("Operator token");
   const unlock = page.getByRole("button", { name: "Unlock activity" });
   await token.fill(worker);
   await unlock.click();
