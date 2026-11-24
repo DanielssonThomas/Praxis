@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Praxis</title>
+  <link rel="stylesheet" href="/assets/shell.css">
+  <script type="module" src="/assets/shell.js"></script>
+</head>
+<body>
+  <header id="shell-header">
+    <div class="header-row">
+      <span class="brand">Praxis</span>
+      <button id="menu-toggle" type="button" aria-controls="main-nav" aria-expanded="false">Menu</button>
+    </div>
+    <nav id="main-nav" aria-label="Main navigation" hidden>
+      <a href="#manager" data-route="manager">Manager</a>
+      <a href="#overview" data-route="overview">Overview</a>
+      <a href="#settings" data-route="settings">Settings</a>
+    </nav>
+  </header>
+  <main id="workspace">
+    <section class="view" data-view="manager" aria-labelledby="manager-title">
+      <h1 id="manager-title">Manager</h1>
+    </section>
+    <section class="view" data-view="overview" aria-labelledby="overview-title" hidden>
+      <h1 id="overview-title">Overview</h1>
+    </section>
+    <section class="view settings-view" data-view="settings" aria-label="Settings" hidden>
+      <iframe id="settings-frame" title="Praxis settings"></iframe>
+    </section>
+  </main>
+  <footer id="command-bar">
+    <form id="command-form" aria-label="Command bar" autocomplete="off">
+      <output id="command-feedback" role="status" aria-live="polite" hidden></output>
+      <div class="command-row">
+        <input id="command" name="command" aria-label="Command" placeholder="Type /help" autocapitalize="none" spellcheck="false">
+        <button type="submit">Run</button>
+      </div>
+    </form>
+  </footer>
+</body>
+</html>
