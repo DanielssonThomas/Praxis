@@ -42,13 +42,20 @@ const grantSchema = z.strictObject({
   ),
   actionKinds: z.array(actionSchema.shape.kind),
 });
-type Grant = z.infer<typeof grantSchema>;
+export type McpGrant = z.infer<typeof grantSchema>;
+type Grant = McpGrant;
 
 export const mcpGrantsSchema = z.array(grantSchema).min(1).refine(
   (grants) => new Set(grants.map(({ principalId }) => principalId)).size === grants.length
     && new Set(grants.map(({ tokenDigest }) => tokenDigest)).size === grants.length,
   "Each MCP principal and token digest must be unique",
 );
+
+export const mcpAuthoritySchema = z.strictObject({
+  schemaVersion: z.literal(contractVersion),
+  database: z.string().min(1),
+  grants: mcpGrantsSchema,
+});
 
 interface Options {
   store: OperationalStore;

@@ -158,7 +158,7 @@ export class HermesRuntime {
     return this.#readRun(assignment);
   }
 
-  async stopAssignment(value: unknown): Promise<RuntimeSessionSnapshot> {
+  async stopAssignment(value: unknown, authorize?: () => Promise<void>): Promise<RuntimeSessionSnapshot> {
     const assignment = parse(hermesAssignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
     const { inspection, stop } = await this.capabilities();
     requireCapability(stop);
@@ -170,6 +170,7 @@ export class HermesRuntime {
     }
     if (state.status !== "queued" && state.status !== "running" && state.status !== "waiting_for_approval") return state;
 
+    await authorize?.();
     const receipt = await this.#request(`/v1/runs/${assignment.runId}/stop`, { method: "POST" });
     const stopped = parse(stopSchema, receipt, "invalid_response", "Hermes did not acknowledge the stop request.");
     if (stopped.run_id !== undefined && stopped.run_id !== assignment.runId) {

@@ -78,6 +78,42 @@ export const actionSchema = z.strictObject({
 });
 export type Action = z.infer<typeof actionSchema>;
 
+export const approvalSchema = z.strictObject({
+  ...version,
+  id: approvalIdSchema,
+  actionId: actionIdSchema,
+});
+export type Approval = z.infer<typeof approvalSchema>;
+
+const scopeDigest = z.string().regex(/^[0-9a-f]{64}$/);
+const actionEvaluation = z.discriminatedUnion("mode", [
+  z.strictObject({ mode: z.literal("routine"), scopeDigest }),
+  z.strictObject({
+    mode: z.literal("approval"),
+    scopeDigest,
+    approval: approvalSchema,
+    expiresAt: z.iso.datetime(),
+  }),
+  z.strictObject({ mode: z.literal("refused"), reason: nonblankText }),
+]);
+const actionDecision = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("routine"), scopeDigest }),
+  z.strictObject({ kind: z.literal("approve"), scopeDigest, approvalId: approvalIdSchema }),
+  z.strictObject({ kind: z.literal("deny"), scopeDigest, approvalId: approvalIdSchema }),
+  z.strictObject({ kind: z.enum(["invalidated", "expired"]), scopeDigest, reason: nonblankText }),
+]);
+const actionSettlement = z.discriminatedUnion("outcome", [
+  z.strictObject({ outcome: z.literal("resolved"), native: runtimeSessionSnapshotSchema }),
+  z.strictObject({ outcome: z.literal("invalidated"), reason: nonblankText }),
+  z.strictObject({ outcome: z.literal("uncertain"), reason: nonblankText }),
+]);
+const actionLifecycleSchema = z.discriminatedUnion("stage", [
+  z.strictObject({ stage: z.literal("evaluation"), value: actionEvaluation }),
+  z.strictObject({ stage: z.literal("decision"), value: actionDecision }),
+  z.strictObject({ stage: z.literal("settlement"), value: actionSettlement }),
+]);
+export type ActionLifecycle = z.infer<typeof actionLifecycleSchema>;
+
 export const workerReportPhaseSchema = z.enum(["progress", "result", "blocked"]);
 export const workerReportMessageSchema = nonblankText.max(8_192);
 const workerReportKind = z.templateLiteral(["worker.", workerReportPhaseSchema]);
@@ -91,6 +127,12 @@ const eventDetailsSchema = z.discriminatedUnion("type", [
     type: z.literal("action_request"),
     actorId: principalIdSchema,
     action: actionSchema,
+  }),
+  z.strictObject({
+    type: z.literal("action_lifecycle"),
+    requestId: eventIdSchema,
+    actionId: actionIdSchema,
+    transition: actionLifecycleSchema,
   }),
 ]);
 
@@ -115,15 +157,12 @@ export const eventSchema = z.strictObject({
     || subject.kind !== details.action.target.kind || subject.id !== details.action.target.id)) {
     context.addIssue({ code: "custom", path: ["details"], message: "Action request details require the exact action target as subject" });
   }
+  if (details?.type === "action_lifecycle" && (kind !== `action.${details.transition.stage}`
+    || subject.kind !== "action" || subject.id !== details.actionId)) {
+    context.addIssue({ code: "custom", path: ["details"], message: "Action lifecycle details require their exact action and stage" });
+  }
 });
 export type Event = z.infer<typeof eventSchema>;
-
-export const approvalSchema = z.strictObject({
-  ...version,
-  id: approvalIdSchema,
-  actionId: actionIdSchema,
-});
-export type Approval = z.infer<typeof approvalSchema>;
 
 const usageIdentity = { ...version, id: usageIdSchema, sessionId: sessionIdSchema };
 

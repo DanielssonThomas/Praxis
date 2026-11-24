@@ -14,8 +14,9 @@
     "test:browser": "node --test tests/browser/shell.browser.mjs",
     "test:hermes": "node --test tests/runtime/hermes.live.mjs",
     "test:mcp:live": "node --test tests/runtime/mcp.live.mjs",
+    "test:approval:live": "node --test tests/runtime/approval.live.mjs",
     "typecheck": "tsc --project tsconfig.json",
-    "build": "tsc --project packages/contracts/tsconfig.json && tsc --project packages/state/tsconfig.json && tsc --project packages/settings/tsconfig.json && tsc --project packages/shell/tsconfig.json && tsc --project packages/hermes-runtime/tsconfig.json && tsc --project packages/mcp/tsconfig.json"
+    "build": "tsc --project packages/contracts/tsconfig.json && tsc --project packages/state/tsconfig.json && tsc --project packages/settings/tsconfig.json && tsc --project packages/hermes-runtime/tsconfig.json && tsc --project packages/mcp/tsconfig.json && tsc --project packages/approvals/tsconfig.json && tsc --project packages/shell/tsconfig.json"
   },
   "devDependencies": {
     "playwright": "1.65.1",
