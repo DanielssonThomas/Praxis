@@ -221,7 +221,7 @@ function render(projection: OverviewProjection): void {
       elements.output.textContent = text;
       elements.output.scrollTop = stick ? elements.output.scrollHeight : scroll;
     }
-    elements.details.textContent = detailsFor(pane);
+    elements.details.textContent = [detailsFor(pane), pane.usageNotice].filter(Boolean).join(" · ");
     if (!elements.controls.busy) displayControls(elements.controls, pane.control);
   }
   setExpansion();

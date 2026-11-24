@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import {
   actionIdSchema,
+  contractVersion,
   eventIdSchema,
   eventSchema,
   sessionIdSchema,
@@ -131,6 +133,31 @@ export class OperationalStore {
     return this.#write(record, { parentId: record.sessionId });
   }
 
+  recordUsageObservation(value: unknown, occurredAt: string): WriteResult {
+    const usage = parseInput(usageSchema, value);
+    if (usage.metering !== "reported") {
+      throw new OperationalStoreError("invalid_record", "An observation requires reported usage");
+    }
+    const observation = parseInput(eventSchema, {
+      schemaVersion: contractVersion,
+      id: `event_usage_${createHash("sha256").update(usage.id).digest("hex")}`,
+      kind: "usage.observed",
+      occurredAt,
+      subject: { kind: "usage", id: usage.id },
+    });
+    const hasObservation = () => this.eventsFor(usage.id).some(
+      ({ kind, subject }) => kind === observation.kind && subject.kind === "usage",
+    );
+    const saved = this.getUsage(usage.id);
+    if (saved !== undefined && JSON.stringify(saved) === JSON.stringify(usage) && hasObservation()) return "duplicate";
+
+    return this.#transaction(() => {
+      const written = this.#write(usage, { parentId: usage.sessionId });
+      if (hasObservation()) return written;
+      return this.#write(observation, { subjectId: usage.id });
+    });
+  }
+
   getTask(id: string): Task | undefined {
     return this.#read(parseInput(taskIdSchema, id), taskSchema);
   }
@@ -194,16 +221,23 @@ export class OperationalStore {
         UPDATE session_controls SET revision = ?, payload = ? WHERE session_id = ? AND revision = ?
       `).run(state.revision, payload, sessionId, revision).changes === 1;
     };
+    if (observed === undefined) return storage("write", compare);
+    return this.#transaction(() => {
+      const changed = compare();
+      if (changed && this.#write(observed, { subjectId: observed.subject.id }) !== "inserted") {
+        throw new OperationalStoreError("identity_conflict", "The control event was already recorded");
+      }
+      return changed;
+    });
+  }
+
+  #transaction<T>(write: () => T): T {
     return storage("write", () => {
-      if (observed === undefined) return compare();
       this.#database.exec("BEGIN IMMEDIATE");
       try {
-        const changed = compare();
-        if (changed && this.#write(observed, { subjectId: observed.subject.id }) !== "inserted") {
-          throw new OperationalStoreError("identity_conflict", "The control event was already recorded");
-        }
+        const result = write();
         this.#database.exec("COMMIT");
-        return changed;
+        return result;
       } catch (error) {
         this.#database.exec("ROLLBACK");
         throw error;

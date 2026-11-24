@@ -14,7 +14,7 @@ const childWriter = `
   const [path, entries] = process.argv.slice(1);
   const store = new OperationalStore(path);
   try {
-    const results = JSON.parse(entries).map(([method, record]) => store[method](record));
+    const results = JSON.parse(entries).map(([method, ...args]) => store[method](...args));
     process.stdout.write(JSON.stringify(results));
   } finally {
     store.close();
@@ -124,6 +124,60 @@ test("concurrent writer processes converge on one durable event", async (t) => {
 
   assert.deepEqual(writes.flat().sort(), ["duplicate", "inserted"]);
   assert.deepEqual(database.open().eventsFor(task.id), [event]);
+});
+
+test("concurrent terminal observations persist one measured zero with the first receipt time", async (t) => {
+  const database = fixture(t);
+  const writer = database.open();
+  writer.recordTask(task);
+  writer.recordSession(session);
+  const times = ["2026-07-28T10:30:00Z", "2026-07-28T10:31:00Z"];
+  const results = await Promise.all(times.map((time) => writeInNewProcess(database.path, [
+    ["recordUsageObservation", reportedUsage, time],
+  ])));
+  const reopened = database.open();
+  assert.deepEqual(results.flat().sort(), ["duplicate", "inserted"]);
+  const [observed] = reopened.eventsFor(reportedUsage.id);
+  assert.equal(reopened.eventsFor(reportedUsage.id).length, 1);
+  assert.equal(observed.kind, "usage.observed");
+  assert.equal(observed.occurredAt, times[results.findIndex(([result]) => result === "inserted")]);
+  assert.deepEqual(reopened.getUsage(reportedUsage.id), reportedUsage);
+  assert.equal(reopened.recordUsageObservation(reportedUsage, "2026-07-28T10:32:00Z"), "duplicate");
+  assert.deepEqual(reopened.eventsFor(reportedUsage.id), [observed]);
+  assert.throws(() => reopened.recordUsageObservation(unavailableUsage, event.occurredAt), { code: "invalid_record" });
+  assert.equal(reopened.getUsage(unavailableUsage.id), undefined);
+});
+
+test("terminal observations reuse older usage and receipt records without partial writes on conflict", (t) => {
+  const database = fixture(t);
+  const writer = database.open();
+  writer.recordTask(task);
+  writer.recordSession(session);
+  writer.recordUsage(reportedUsage);
+  assert.equal(writer.recordUsageObservation(reportedUsage, event.occurredAt), "inserted");
+  const [observed] = writer.eventsFor(reportedUsage.id);
+  assert.throws(() => writer.recordUsageObservation({ ...reportedUsage, inputTokens: 1 }, event.occurredAt), {
+    code: "identity_conflict",
+  });
+  assert.deepEqual(writer.getUsage(reportedUsage.id), reportedUsage);
+  assert.deepEqual(writer.eventsFor(reportedUsage.id), [observed]);
+
+  const legacyUsage = { ...reportedUsage, id: "usage_legacy" };
+  const legacy = {
+    ...event, id: "event_old_receipt", kind: "usage.observed", subject: { kind: "usage", id: legacyUsage.id },
+  };
+  writer.recordUsage(legacyUsage);
+  writer.appendEvent(legacy);
+  assert.equal(writer.recordUsageObservation(legacyUsage, "2026-07-29T10:30:00Z"), "duplicate");
+  assert.deepEqual(writer.eventsFor(legacyUsage.id), [legacy]);
+
+  const blocked = fixture(t).open();
+  blocked.recordTask(task);
+  blocked.recordSession(session);
+  blocked.appendEvent({ ...event, id: observed.id });
+  assert.throws(() => blocked.recordUsageObservation(reportedUsage, event.occurredAt), { code: "identity_conflict" });
+  assert.equal(blocked.getUsage(reportedUsage.id), undefined, "a failed receipt rolls back the new measurement");
+  assert.deepEqual(blocked.eventsFor(reportedUsage.id), []);
 });
 
 test("rejected records and unavailable storage surface explicit failures without partial writes", (t) => {
