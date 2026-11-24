@@ -39,6 +39,7 @@ async function sandboxProvider() {
     ["/other/v1", { output: "other fixture output", key: randomUUID() }],
   ]);
   const observed = new Set();
+  const mainRequests = [];
   const server = await listen(async (request, response) => {
     const prefix = request.url?.replace(/\/(chat\/completions|models)$/, "");
     const fixture = profiles.get(prefix);
@@ -58,8 +59,10 @@ async function sandboxProvider() {
     try {
       const chunks = [];
       for await (const chunk of request) chunks.push(chunk);
-      const { stream } = JSON.parse(Buffer.concat(chunks).toString());
+      const { messages, stream, tools } = JSON.parse(Buffer.concat(chunks).toString());
       observed.add(prefix);
+      // Hermes sends auxiliary calls such as session titling without tools.
+      if (tools?.length) mainRequests.push({ prefix, messages });
       const metadata = { id: "chatcmpl-routing-fixture", created: 1, model: "fake-model" };
       const message = { role: "assistant", content: fixture.output };
       const usage = { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 };
@@ -83,12 +86,13 @@ async function sandboxProvider() {
       response.writeHead(400).end();
     }
   });
-  return { ...server, profiles, observed };
+  return { ...server, profiles, observed, mainRequests };
 }
 
 let directory;
 let provider;
 let gateway;
+let gatewayLaunch;
 let origin;
 let profileKeys;
 let rootKey;
@@ -166,14 +170,22 @@ before(async () => {
   const port = reserved.port;
   await reserved.close();
   origin = reserved.origin;
-  gateway = spawn(executable, ["gateway", "run"], {
-    env: {
+  gatewayLaunch = {
+    executable,
+    environment: {
       ...env,
       API_SERVER_ENABLED: "true",
       API_SERVER_HOST: "127.0.0.1",
       API_SERVER_PORT: String(port),
       API_SERVER_KEY: rootKey,
     },
+  };
+  await startGateway();
+}, { timeout: 90_000 });
+
+async function startGateway() {
+  gateway = spawn(gatewayLaunch.executable, ["gateway", "run"], {
+    env: gatewayLaunch.environment,
     stdio: "ignore",
   });
   await until(async () => {
@@ -187,7 +199,7 @@ before(async () => {
       return false;
     }
   }, "Hermes did not expose the authenticated manager profile route");
-}, { timeout: 90_000 });
+}
 
 after(async () => {
   try {
@@ -315,4 +327,96 @@ test("Praxis delivers the assignment lifecycle to the selected Hermes profile", 
   assert.equal(panes.length, 1);
   assert.deepEqual(panes[0].runtime.snapshot, snapshot);
   t.diagnostic("The Praxis runtime and configured Overview used the same named profile run, and default and sibling runtime instances could neither inspect nor stop it.");
+});
+
+
+test("named Hermes preserves follow-up history, separate sessions and retry receipts", { timeout: 150_000 }, async (t) => {
+  const endpoint = scopedEndpoint(origin, manager);
+  const key = profileKeys.get(manager);
+  const runtime = new HermesRuntime({ origin: endpoint, apiKey: key });
+  const reconnected = new HermesRuntime({ origin: endpoint, apiKey: key });
+  const sibling = new HermesRuntime({ origin: scopedEndpoint(origin, other), apiKey: profileKeys.get(other) });
+  const session = { schemaVersion: 1, id: "session_named_follow_up", taskId: "task_named_follow_up" };
+  const independent = { ...session, id: "session_named_follow_up_independent" };
+  const initialPrompt = "First named-session marker apple-31.";
+  const nextPrompt = "Continue the named session using the previous marker.";
+  const independentPrompt = "Independent named-session marker lime-72.";
+  const changedPrompt = "Conflicting replacement of the admitted turn.";
+  const turnId = "turn_native_fixture";
+  const attemptStart = provider.mainRequests.length;
+
+  const complete = (adapter, assignment) => until(async () => {
+    const result = await adapter.inspectAssignment(assignment);
+    assert.notEqual(result.status, "failed");
+    return result.status === "completed" ? result : false;
+  }, "The native turn did not complete");
+
+  const initial = await runtime.submitTurn(session, initialPrompt, "turn_initial_fixture");
+  assert.equal((await complete(runtime, initial)).output.text, "manager fixture output");
+  const [followUp, replay] = await Promise.all([
+    runtime.submitTurn(session, nextPrompt, turnId),
+    reconnected.submitTurn(session, nextPrompt, turnId),
+  ]);
+  assert.notEqual(followUp.runId, initial.runId);
+  assert.deepEqual(replay, followUp);
+  assert.equal((await complete(reconnected, followUp)).output.text, "manager fixture output");
+  assert.deepEqual(await reconnected.submitTurn(session, nextPrompt, turnId), followUp);
+  await assert.rejects(reconnected.submitTurn(session, changedPrompt, turnId), {
+    code: "native_refused", message: /HTTP 409/,
+  });
+
+  const separateRun = await runtime.submitTurn(independent, independentPrompt, turnId);
+  assert.equal((await complete(runtime, separateRun)).output.text, "manager fixture output");
+  const siblingRun = await sibling.submitTurn(session, nextPrompt, turnId);
+  assert.equal((await complete(sibling, siblingRun)).output.text, "other fixture output");
+  assert.equal(new Set([initial, followUp, separateRun, siblingRun].map(({ runId }) => runId)).size, 4);
+  await assert.rejects(sibling.inspectAssignment(followUp), { code: "not_found" });
+  await assert.rejects(reconnected.inspectAssignment(siblingRun), { code: "not_found" });
+
+  const nativeReceipt = async (assignment) => {
+    const response = await request(endpoint, key, "/v1/runs/" + assignment.runId);
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+  const firstReceipt = await nativeReceipt(initial);
+  const nextReceipt = await nativeReceipt(followUp);
+  const independentReceipt = await nativeReceipt(separateRun);
+  const siblingResponse = await request(scopedEndpoint(origin, other), profileKeys.get(other), "/v1/runs/" + siblingRun.runId);
+  assert.equal(siblingResponse.status, 200);
+  const siblingReceipt = await siblingResponse.json();
+  assert.equal(firstReceipt.session_id, nextReceipt.session_id);
+  assert.equal(new Set([firstReceipt, independentReceipt, siblingReceipt].map(({ session_id }) => session_id)).size, 3);
+
+  const readHistory = async ({ session_id: id }) => {
+    const response = await request(endpoint, key, `/api/sessions/${id}/messages?order=oldest`);
+    assert.equal(response.status, 200);
+    const history = await response.json();
+    assert.equal(history.session_id, id);
+    return history.data.filter(({ role }) => role === "user" || role === "assistant");
+  };
+  const mainHistory = await readHistory(firstReceipt);
+  const isolatedHistory = await readHistory(independentReceipt);
+  const contents = (messages) => messages.map(({ content }) => content);
+  assert.deepEqual(contents(mainHistory), [initialPrompt, "manager fixture output", nextPrompt, "manager fixture output"]);
+  assert.deepEqual(contents(isolatedHistory), [independentPrompt, "manager fixture output"]);
+
+  await stopProcess(gateway);
+  await startGateway();
+  const afterGatewayRestart = new HermesRuntime({ origin: endpoint, apiKey: key });
+  assert.deepEqual(await afterGatewayRestart.submitTurn(session, nextPrompt, turnId), followUp);
+  assert.equal((await afterGatewayRestart.inspectAssignment(initial)).output.text, "manager fixture output");
+  assert.equal((await afterGatewayRestart.inspectAssignment(followUp)).output.text, "manager fixture output");
+
+  const calls = provider.mainRequests.slice(attemptStart).map(({ prefix, messages }) => {
+    const conversation = messages.filter(({ role }) => role === "user" || role === "assistant");
+    return { prefix, conversation, input: conversation.at(-1)?.content };
+  });
+  assert.deepEqual(calls.map(({ prefix, input }) => [prefix, input]), [
+    ["/manager/v1", initialPrompt], ["/manager/v1", nextPrompt],
+    ["/manager/v1", independentPrompt], ["/other/v1", nextPrompt],
+  ]);
+  assert.deepEqual(contents(calls[1].conversation), [initialPrompt, "manager fixture output", nextPrompt]);
+  assert.deepEqual(contents(calls[2].conversation), [independentPrompt]);
+  assert.deepEqual(contents(calls[3].conversation), [nextPrompt]);
+  t.diagnostic("Real Hermes preserved the selected profile's conversation on the wire and in its transcript. Concurrent, settled and post-restart retries reused the follow-up run without another main model turn. A changed prompt was refused.");
 });

@@ -47,6 +47,7 @@ const nativeStreamEvent = z.object({
 const creationSchema = z.object({ run_id: runId });
 const stopSchema = z.object({ run_id: runId.optional(), status: z.string() });
 const promptSchema = z.string().refine((text) => text.trim().length > 0);
+const turnIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
 export const manualGuidanceSchema = z.string().trim().min(1).max(1_000);
 const steerSchema = z.object({ run_id: runId, accepted: z.literal(true) });
 const transcriptPageSize = 100;
@@ -107,20 +108,22 @@ function parse<T>(schema: z.ZodType<T>, value: unknown, code: "invalid_input" | 
   throw new HermesRuntimeError(code, message);
 }
 
-function loopbackBaseUrl(value: string): string {
+function loopbackEndpoint(value: string): { baseUrl: string; profile: string | undefined } {
   // Check the input before URL parsing can normalize escaped paths or dot segments.
   const match = /^https?:\/\/(?:[a-z0-9.]+|\[[0-9a-f:.]+\])(?::[0-9]+)?(\/[^\\?#\s]*)?$/i.exec(value);
   const path = match?.[1] ?? "/";
   const url = match?.[0] === value ? URL.parse(value) : null;
-  if (!url || !["127.0.0.1", "[::1]"].includes(url.hostname)
-    || (path !== "/" && !/^\/p\/[a-z0-9][a-z0-9_-]{0,63}\/?$/.test(path))) {
+  const profile = /^\/p\/([a-z0-9][a-z0-9_-]{0,63})\/?$/.exec(path)?.[1];
+  if (!url || !["127.0.0.1", "[::1]"].includes(url.hostname) || (path !== "/" && profile === undefined)) {
     throw new HermesRuntimeError("invalid_input", "Set Hermes to an explicit loopback HTTP(S) URL with an optional /p/<profile> path.");
   }
-  return url.origin + path.replace(/\/$/, "");
+  return { baseUrl: url.origin + path.replace(/\/$/, ""), profile: profile === "default" ? undefined : profile };
 }
 
-function nativeSessionFor(taskId: string, sessionId: string): string {
-  return `praxis-${createHash("sha256").update(taskId).update("\0").update(sessionId).digest("hex")}`;
+function nativeSessionFor(taskId: string, sessionId: string, profile?: string): string {
+  const identity = createHash("sha256").update(taskId).update("\0").update(sessionId);
+  if (profile !== undefined) identity.update("\0").update(profile);
+  return `praxis-${identity.digest("hex")}`;
 }
 
 function nativeFeature(features: Record<string, unknown>, name: string): Capability {
@@ -167,10 +170,13 @@ function normalizeUsage(value: unknown, assignment: HermesAssignment): Usage {
 
 export class HermesRuntime {
   readonly #baseUrl: string;
+  readonly #profile: string | undefined;
   readonly #apiKey: string;
 
   constructor(options: { origin: string; apiKey: string }) {
-    this.#baseUrl = loopbackBaseUrl(options.origin);
+    const { baseUrl, profile } = loopbackEndpoint(options.origin);
+    this.#baseUrl = baseUrl;
+    this.#profile = profile;
     if (typeof options.apiKey !== "string" || !/^[!-~]+$/.test(options.apiKey)) {
       throw new HermesRuntimeError("invalid_input", "Supply a Hermes bearer credential outside the Praxis settings file.");
     }
@@ -192,15 +198,26 @@ export class HermesRuntime {
     };
   }
 
-  async createAssignment(sessionValue: unknown, promptValue: unknown): Promise<HermesAssignment> {
+  createAssignment(sessionValue: unknown, promptValue: unknown): Promise<HermesAssignment> {
+    return this.#submitAssignment(sessionValue, promptValue);
+  }
+
+  async submitTurn(sessionValue: unknown, promptValue: unknown, turnIdValue: unknown): Promise<HermesAssignment> {
+    const turnId = parse(turnIdSchema, turnIdValue, "invalid_input", "Supply a valid Praxis turn identity.");
+    return this.#submitAssignment(sessionValue, promptValue, turnId);
+  }
+
+  async #submitAssignment(sessionValue: unknown, promptValue: unknown, turnId?: string): Promise<HermesAssignment> {
     const session = parse(sessionSchema, sessionValue, "invalid_input", "Supply a valid Praxis session.");
     const prompt = parse(promptSchema, promptValue, "invalid_input", "Supply a nonblank assignment prompt.");
     requireCapability((await this.capabilities()).submission);
 
-    const nativeSession = nativeSessionFor(session.taskId, session.id);
+    const nativeSession = nativeSessionFor(session.taskId, session.id, turnId === undefined ? undefined : this.#profile);
+    const idempotencyKey = turnId === undefined ? nativeSession
+      : `praxis-turn-${createHash("sha256").update(nativeSession).update("\0").update(turnId).digest("hex")}`;
     const receipt = await this.#request("/v1/runs", {
       method: "POST",
-      headers: { "Idempotency-Key": nativeSession },
+      headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify({ input: prompt, session_id: nativeSession }),
     });
     const { run_id } = parse(creationSchema, receipt, "invalid_response", "Hermes did not return a native run ID.");
@@ -217,8 +234,8 @@ export class HermesRuntime {
     const assignment = parse(hermesAssignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
     const capabilities = await this.capabilities();
     requireCapability(capabilities.inspection);
-    const inspected = await this.#readRun(assignment);
-    const { snapshot } = inspected;
+    const { snapshot, usage } = await this.#readRun(assignment);
+    const inspected = { snapshot, usage };
     if (snapshot.status !== "queued" && snapshot.status !== "running" && snapshot.status !== "waiting_for_approval"
       && snapshot.status !== "stopping") {
       if (snapshot.output.availability === "unavailable" && previous?.runId === assignment.runId
@@ -266,17 +283,23 @@ export class HermesRuntime {
 
   async guidanceReady(value: unknown): Promise<boolean> {
     const assignment = parse(hermesAssignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
-    const { inspection, manualGuidance } = await this.capabilities();
-    if (!inspection.available || !manualGuidance.available) return false;
-    return (await this.#readRun(assignment)).snapshot.status === "running";
+    return (await this.#guidanceTarget(assignment)) !== undefined;
   }
 
   async guidanceBaseline(value: unknown): Promise<number> {
     const assignment = parse(hermesAssignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
-    if (!await this.guidanceReady(assignment)) {
+    const nativeSessionId = await this.#guidanceTarget(assignment);
+    if (nativeSessionId === undefined) {
       throw new HermesRuntimeError("unsupported", "Hermes is not accepting guidance for this run.");
     }
-    return (await this.#readTranscript(assignment, 1)).at(-1)?.id ?? 0;
+    return (await this.#readTranscript(nativeSessionId, 1)).at(-1)?.id ?? 0;
+  }
+
+  async #guidanceTarget(assignment: HermesAssignment): Promise<string | undefined> {
+    const { inspection, manualGuidance } = await this.capabilities();
+    if (!inspection.available || !manualGuidance.available) return;
+    const { snapshot, nativeSessionId } = await this.#readRun(assignment);
+    return snapshot.status === "running" ? nativeSessionId : undefined;
   }
 
   async steerAssignment(value: unknown, textValue: unknown, authorize: () => Promise<void>): Promise<void> {
@@ -297,12 +320,12 @@ export class HermesRuntime {
 
   async reconcileGuidance(value: unknown, after: number, textDigest: string): Promise<"delivered" | "recorded" | undefined> {
     const assignment = parse(hermesAssignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
-    const { snapshot } = await this.#readRun(assignment);
+    const { snapshot, nativeSessionId } = await this.#readRun(assignment);
     const terminal = ["completed", "failed", "stopped", "interrupted"].includes(snapshot.status);
     const deadline = AbortSignal.timeout(20_000);
     let boundary: string | undefined;
     for (let offset = 0; ; offset += transcriptPageSize - 1) {
-      const rows = await this.#readTranscript(assignment, transcriptPageSize, offset, deadline);
+      const rows = await this.#readTranscript(nativeSessionId, transcriptPageSize, offset, deadline);
       if (boundary !== undefined && JSON.stringify(rows.at(-1)) !== boundary) {
         throw new HermesRuntimeError("unavailable", "The Hermes transcript changed during verification. Try again.");
       }
@@ -318,8 +341,7 @@ export class HermesRuntime {
     }
   }
 
-  async #readTranscript(assignment: HermesAssignment, limit: number, offset = 0, signal?: AbortSignal) {
-    const session = nativeSessionFor(assignment.taskId, assignment.sessionId);
+  async #readTranscript(session: string, limit: number, offset = 0, signal?: AbortSignal) {
     const response = await this.#request(
       `/api/sessions/${session}/messages?limit=${limit}&offset=${offset}&order=latest&include_compacted=true`, { signal },
     );
@@ -335,13 +357,17 @@ export class HermesRuntime {
     return data;
   }
 
-  async #readRun(assignment: HermesAssignment): Promise<RunInspection> {
+  async #readRun(assignment: HermesAssignment): Promise<RunInspection & { nativeSessionId: string }> {
     const value = await this.#request(`/v1/runs/${assignment.runId}`);
     const receipt = parse(receiptSchema, value, "invalid_response", "Hermes returned an invalid run receipt.");
-    if (receipt.run_id !== assignment.runId || receipt.session_id !== nativeSessionFor(assignment.taskId, assignment.sessionId)) {
+    const legacySession = nativeSessionFor(assignment.taskId, assignment.sessionId);
+    const scopedSession = this.#profile === undefined ? legacySession
+      : nativeSessionFor(assignment.taskId, assignment.sessionId, this.#profile);
+    if (receipt.run_id !== assignment.runId || (receipt.session_id !== legacySession && receipt.session_id !== scopedSession)) {
       throw new HermesRuntimeError("assignment_mismatch", "The Hermes run does not match the Praxis assignment.");
     }
     return {
+      nativeSessionId: receipt.session_id,
       snapshot: {
         schemaVersion: contractVersion,
         taskId: assignment.taskId,
