@@ -15,6 +15,7 @@ export const eventIdSchema = recordId("event");
 export const actionIdSchema = recordId("action");
 export const approvalIdSchema = recordId("approval");
 export const usageIdSchema = recordId("usage");
+export const principalIdSchema = recordId("principal");
 
 export type TaskId = z.infer<typeof taskIdSchema>;
 export type SessionId = z.infer<typeof sessionIdSchema>;
@@ -69,6 +70,30 @@ const actionReference = z.strictObject({ kind: z.literal("action"), id: actionId
 const approvalReference = z.strictObject({ kind: z.literal("approval"), id: approvalIdSchema });
 const usageReference = z.strictObject({ kind: z.literal("usage"), id: usageIdSchema });
 
+export const actionSchema = z.strictObject({
+  ...version,
+  id: actionIdSchema,
+  kind: recordKind,
+  target: z.discriminatedUnion("kind", [taskReference, sessionReference]),
+});
+export type Action = z.infer<typeof actionSchema>;
+
+export const workerReportPhaseSchema = z.enum(["progress", "result", "blocked"]);
+export const workerReportMessageSchema = nonblankText.max(8_192);
+const workerReportKind = z.templateLiteral(["worker.", workerReportPhaseSchema]);
+const eventDetailsSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    type: z.literal("worker_report"),
+    actorId: principalIdSchema,
+    message: workerReportMessageSchema,
+  }),
+  z.strictObject({
+    type: z.literal("action_request"),
+    actorId: principalIdSchema,
+    action: actionSchema,
+  }),
+]);
+
 export const eventSchema = z.strictObject({
   ...version,
   id: eventIdSchema,
@@ -81,16 +106,17 @@ export const eventSchema = z.strictObject({
     approvalReference,
     usageReference,
   ]),
+  details: eventDetailsSchema.optional(),
+}).superRefine(({ kind, subject, details }, context) => {
+  if (details?.type === "worker_report" && (subject.kind !== "session" || !workerReportKind.safeParse(kind).success)) {
+    context.addIssue({ code: "custom", path: ["details"], message: "Worker report details require a worker event and a session subject" });
+  }
+  if (details?.type === "action_request" && (kind !== "action.requested"
+    || subject.kind !== details.action.target.kind || subject.id !== details.action.target.id)) {
+    context.addIssue({ code: "custom", path: ["details"], message: "Action request details require the exact action target as subject" });
+  }
 });
 export type Event = z.infer<typeof eventSchema>;
-
-export const actionSchema = z.strictObject({
-  ...version,
-  id: actionIdSchema,
-  kind: recordKind,
-  target: z.discriminatedUnion("kind", [taskReference, sessionReference]),
-});
-export type Action = z.infer<typeof actionSchema>;
 
 export const approvalSchema = z.strictObject({
   ...version,

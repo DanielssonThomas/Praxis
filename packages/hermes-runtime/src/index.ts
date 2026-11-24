@@ -11,13 +11,13 @@ import type { RuntimeOutput, RuntimeSessionSnapshot, RuntimeSessionStatus } from
 import { z } from "zod";
 
 const runId = z.string().regex(/^run_[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
-const assignmentSchema = z.strictObject({
+export const hermesAssignmentSchema = z.strictObject({
   schemaVersion: z.literal(contractVersion),
   taskId: taskIdSchema,
   sessionId: sessionIdSchema,
   runId,
 });
-export type HermesAssignment = z.infer<typeof assignmentSchema>;
+export type HermesAssignment = z.infer<typeof hermesAssignmentSchema>;
 
 const nativeCapabilitiesSchema = z.object({
   platform: z.literal("hermes-agent"),
@@ -153,13 +153,13 @@ export class HermesRuntime {
   }
 
   async inspectAssignment(value: unknown): Promise<RuntimeSessionSnapshot> {
-    const assignment = parse(assignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
+    const assignment = parse(hermesAssignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
     requireCapability((await this.capabilities()).inspection);
     return this.#readRun(assignment);
   }
 
   async stopAssignment(value: unknown): Promise<RuntimeSessionSnapshot> {
-    const assignment = parse(assignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
+    const assignment = parse(hermesAssignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
     const { inspection, stop } = await this.capabilities();
     requireCapability(stop);
     requireCapability(inspection);

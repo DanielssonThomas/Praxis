@@ -1,99 +1,17 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:http";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { runtimeSessionSnapshotSchema } from "@praxis/contracts";
 import { HermesRuntime } from "@praxis/hermes-runtime";
 import { chromium } from "playwright";
+import { startHermesFixture, stopProcess, until } from "./hermes-fixture.mjs";
 
 const execute = promisify(execFile);
 const holdPrompt = "Wait for the isolated Praxis runtime fixture.";
 const finalOutput = "Hermes completed the isolated Praxis fixture.";
-
-async function listen(server) {
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  return server.address().port;
-}
-
-async function closeServer(server) {
-  server.closeAllConnections();
-  await new Promise((resolve) => server.close(resolve));
-}
-
-async function stopProcess(process) {
-  if (process === undefined || process.exitCode !== null || process.signalCode !== null) return;
-  const exited = once(process, "exit");
-  process.kill();
-  const kill = setTimeout(() => process.kill("SIGKILL"), 10_000);
-  try {
-    await exited;
-  } finally {
-    clearTimeout(kill);
-  }
-}
-
-async function until(observe, description, timeout = 25_000) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    const result = await observe();
-    if (result) return result;
-    await delay(150);
-  }
-  assert.fail(description);
-}
-
-async function providerFixture() {
-  let holdCalls = 0;
-  let release;
-  const hold = new Promise((resolve) => { release = resolve; });
-  const server = createServer(async (request, response) => {
-    if (request.method === "GET" && request.url === "/v1/models") {
-      response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ object: "list", data: [{ id: "fake-model", object: "model" }] }));
-      return;
-    }
-    if (request.method !== "POST" || request.url !== "/v1/chat/completions") {
-      response.writeHead(404).end();
-      return;
-    }
-
-    const chunks = [];
-    for await (const chunk of request) chunks.push(chunk);
-    const call = JSON.parse(Buffer.concat(chunks).toString());
-    if (call.messages.some(({ content }) => JSON.stringify(content)?.includes(holdPrompt))) {
-      holdCalls += 1;
-      await hold;
-    }
-
-    const base = { id: "chatcmpl-praxis-fixture", created: 1, model: "fake-model" };
-    const usage = { prompt_tokens: 8, completion_tokens: 8, total_tokens: 16 };
-    if (call.stream) {
-      response.writeHead(200, { "Content-Type": "text/event-stream" });
-      const frame = (choices) => `data: ${JSON.stringify({ ...base, object: "chat.completion.chunk", choices })}\n\n`;
-      response.write(frame([{ index: 0, delta: { role: "assistant", content: finalOutput }, finish_reason: null }]));
-      response.write(frame([{ index: 0, delta: {}, finish_reason: "stop" }]));
-      response.end("data: [DONE]\n\n");
-    } else {
-      response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({
-        ...base,
-        object: "chat.completion",
-        choices: [{ index: 0, message: { role: "assistant", content: finalOutput }, finish_reason: "stop" }],
-        usage,
-      }));
-    }
-  });
-  const port = await listen(server);
-  return { origin: `http://127.0.0.1:${port}/v1`, release, holdCalls: () => holdCalls, close: () => closeServer(server) };
-}
 
 async function startShell(directory) {
   const processHandle = spawn(process.execPath, ["packages/shell/dist/cli.js"], {
@@ -122,83 +40,25 @@ async function waitForState(runtime, assignment, expected) {
 }
 
 test("real Hermes runs survive closing Praxis and can be inspected and stopped after reopening", { timeout: 120_000 }, async (t) => {
-  const executable = process.env.PRAXIS_HERMES_BIN;
-  assert.ok(executable, "Set PRAXIS_HERMES_BIN to an installed Hermes executable with the messaging extra");
+  let holdCalls = 0;
+  let release;
+  const hold = new Promise((resolve) => { release = resolve; });
+  t.after(release);
+  const { origin, apiKey, runtime, directory } = await startHermesFixture(t, async (call) => {
+    if (call.messages.some(({ content }) => JSON.stringify(content)?.includes(holdPrompt))) {
+      holdCalls += 1;
+      await hold;
+    }
+    return { message: { role: "assistant", content: finalOutput } };
+  });
 
-  const directory = await mkdtemp(join(tmpdir(), "praxis-hermes-live-"));
-  const provider = await providerFixture();
-  let gateway;
   let browser;
   let shell;
   t.after(async () => {
-    provider.release();
     await browser?.close();
     await stopProcess(shell?.processHandle);
-    await stopProcess(gateway);
-    await provider.close();
-    await rm(directory, { recursive: true, force: true });
   });
 
-  const reservedPort = createServer();
-  const port = await listen(reservedPort);
-  await closeServer(reservedPort);
-  const hermesHome = join(directory, ".hermes");
-  await mkdir(hermesHome);
-  await writeFile(join(hermesHome, "config.yaml"), [
-    "model:",
-    "  provider: custom",
-    `  base_url: ${provider.origin}`,
-    "  default: fake-model",
-    "  context_length: 128000",
-    "updates:",
-    "  check: false",
-    "kanban:",
-    "  dispatch_in_gateway: false",
-    "",
-  ].join("\n"));
-
-  const apiKey = randomUUID();
-  const origin = `http://127.0.0.1:${port}`;
-  const env = {
-    PATH: process.env.PATH,
-    HOME: directory,
-    HERMES_HOME: hermesHome,
-    HERMES_NO_SYSTEMD: "1",
-    TERM: "dumb",
-    API_SERVER_ENABLED: "true",
-    API_SERVER_HOST: "127.0.0.1",
-    API_SERVER_PORT: String(port),
-    API_SERVER_KEY: apiKey,
-    OPENAI_API_KEY: "fixture-only-provider-key",
-  };
-  const version = await execute(executable, ["--version"], { env, timeout: 10_000 });
-  t.diagnostic(version.stdout.split("\n").filter((line) => /^(Hermes Agent|Python:|OpenAI SDK:)/.test(line)).join("\n"));
-
-  gateway = spawn(executable, ["gateway", "run"], { env, stdio: ["ignore", "pipe", "pipe"] });
-  let gatewayTail = "";
-  for (const stream of [gateway.stdout, gateway.stderr]) {
-    stream.on("data", (output) => { gatewayTail = (gatewayTail + output).slice(-4_096); });
-  }
-
-  const runtime = new HermesRuntime({ origin, apiKey });
-  try {
-    await until(async () => {
-      if (gateway.exitCode !== null) throw new Error("Hermes exited before opening its API");
-      try {
-        const capabilities = await runtime.capabilities();
-        assert.equal(capabilities.submission.available, true);
-        assert.equal(capabilities.inspection.available, true);
-        assert.equal(capabilities.stop.available, true);
-        return true;
-      } catch (error) {
-        if (error.code === "unavailable") return false;
-        throw error;
-      }
-    }, "The native Hermes API did not become ready");
-  } catch (error) {
-    t.diagnostic(gatewayTail);
-    throw error;
-  }
   await assert.rejects(new HermesRuntime({ origin, apiKey: "invalid-fixture-key" }).capabilities(), { code: "unauthorized" });
 
   browser = await chromium.launch({ executablePath: process.env.PRAXIS_TEST_CHROMIUM });
@@ -218,7 +78,7 @@ test("real Hermes runs survive closing Praxis and can be inspected and stopped a
     "--input-type=module", "--eval", submit, origin, JSON.stringify(session), holdPrompt,
   ], { env: { ...process.env, PRAXIS_FIXTURE_KEY: apiKey }, timeout: 20_000 });
   const assignment = JSON.parse(child.stdout);
-  await until(() => provider.holdCalls() > 0, "The native run did not invoke the loopback provider");
+  await until(() => holdCalls > 0, "The native run did not invoke the loopback provider");
   const active = await waitForState(runtime, assignment, "running");
   assert.deepEqual(runtimeSessionSnapshotSchema.parse(active), active);
   assert.equal(active.output.availability, "unavailable");
@@ -233,9 +93,9 @@ test("real Hermes runs survive closing Praxis and can be inspected and stopped a
   const reconnected = new HermesRuntime({ origin, apiKey });
   assert.equal((await reconnected.inspectAssignment(assignment)).status, "running");
   assert.equal((await reconnected.createAssignment(session, holdPrompt)).runId, assignment.runId);
-  assert.equal(provider.holdCalls(), 1);
+  assert.equal(holdCalls, 1);
   assert.equal((await reconnected.stopAssignment(assignment)).status, "stopping");
-  provider.release();
+  release();
   await waitForState(reconnected, assignment, "stopped");
 
   const completedAssignment = await reconnected.createAssignment({
