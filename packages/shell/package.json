@@ -10,7 +10,8 @@
     "@praxis/kanban": "0.1.0",
     "@praxis/mcp": "0.1.0",
     "@praxis/settings": "0.1.0",
-    "@praxis/state": "0.1.0"
+    "@praxis/state": "0.1.0",
+    "chart.js": "4.6.2"
   },
   "devDependencies": {
     "@types/node": "24.19.2"

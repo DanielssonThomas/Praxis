@@ -6,6 +6,7 @@ import { kanbanRoutesFromEnv } from "@praxis/kanban/http";
 import { settingsPath } from "@praxis/settings";
 import { serveSettings } from "@praxis/settings/http";
 import { overviewRoutesFromEnv } from "./overview-server.js";
+import { reportsRoutesFromEnv } from "./reports-server.js";
 
 const port = Number(process.env.PRAXIS_PORT ?? 3210);
 if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -16,6 +17,7 @@ const config = settingsPath();
 const activity = await approvalRoutesFromEnv();
 const kanban = await kanbanRoutesFromEnv();
 const overview = await overviewRoutesFromEnv(activity?.list);
+const reports = await reportsRoutesFromEnv(config);
 const assets = new Map([
   ["/", { url: new URL("../web/index.html", import.meta.url), type: "text/html; charset=utf-8" }],
   ["/assets/shell.css", { url: new URL("../web/shell.css", import.meta.url), type: "text/css; charset=utf-8" }],
@@ -23,6 +25,11 @@ const assets = new Map([
   ["/assets/activity.js", { url: new URL("./activity.js", import.meta.url), type: "text/javascript; charset=utf-8" }],
   ["/assets/kanban.js", { url: new URL("./kanban.js", import.meta.url), type: "text/javascript; charset=utf-8" }],
   ["/assets/overview.js", { url: new URL("./overview.js", import.meta.url), type: "text/javascript; charset=utf-8" }],
+  ["/assets/reports.js", { url: new URL("./reports.js", import.meta.url), type: "text/javascript; charset=utf-8" }],
+  ["/assets/chart.js", {
+    url: new URL("./chart.umd.min.js", import.meta.resolve("chart.js")),
+    type: "text/javascript; charset=utf-8",
+  }],
 ]);
 
 async function serve(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -30,6 +37,7 @@ async function serve(request: IncomingMessage, response: ServerResponse): Promis
   if (await activity?.serve(request, response)) return;
   if (await kanban?.serve(request, response)) return;
   if (await overview?.serve(request, response)) return;
+  if (await reports?.serve(request, response)) return;
   const path = request.url?.split("?")[0] ?? "";
   const asset = assets.get(path);
   if (asset === undefined) {
@@ -46,6 +54,7 @@ async function serve(request: IncomingMessage, response: ServerResponse): Promis
       .replace('data-activity="unavailable"', `data-activity="${activity === undefined ? "unavailable" : "available"}"`)
       .replace('data-kanban="unavailable"', `data-kanban="${kanban === undefined ? "unavailable" : "available"}"`)
       .replace('data-overview="unavailable"', `data-overview="${overview === undefined ? "unavailable" : "available"}"`)
+      .replace('data-reports="unavailable"', `data-reports="${reports === undefined ? "unavailable" : "available"}"`)
     : body;
   response.writeHead(200, {
     "Content-Type": asset.type,
@@ -65,6 +74,7 @@ server.once("close", () => {
   void activity?.close();
   kanban?.close();
   overview?.close();
+  reports?.close();
 });
 server.listen(port, "127.0.0.1", () => {
   const address = server.address();
