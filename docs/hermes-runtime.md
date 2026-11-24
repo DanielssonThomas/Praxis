@@ -6,7 +6,9 @@
 
 `inspectAssignment` returns the canonical runtime snapshot from a native run receipt. The adapter bounds the output tail and reports missing output or unrecognized state explicitly. `stopAssignment` first verifies that the native run belongs to the requested Praxis session, then invokes Hermes's exact-run stop endpoint. The native `stopping` acknowledgment indicates a request. Poll the run to observe a settled `stopped` status. Closing the Praxis UI or its local web host leaves the independent Hermes process running.
 
-`capabilities` checks the advertised Hermes API flags for submission, inspection and stop. This adapter exposes run receipts. Live output streaming, attaching to non-API sessions, and operating a Kanban board require separate integrations. Hermes retains native run and idempotency receipts according to its own documented limits. The adapter leaves dispatch, execution and cancellation with Hermes. See the [pinned Runs reference](https://github.com/NousResearch/hermes-agent/blob/caafe5389ae585ef77387a962aee05b1bcf17029/website/docs/user-guide/features/api-server.md#runs-api-streaming-friendly-alternative).
+`capabilities` checks the advertised Hermes API flags for submission, inspection, stop and streaming. `inspectLiveAssignment` reads the run receipt together with available token usage and bounded live output. Native event cursors use `Last-Event-ID` on reconnect. An expired buffer or unsupported stream remains explicitly unavailable. This surface uses API sessions. The separate [Kanban view](kanban.md) reads native boards.
+
+Hermes retains native run and idempotency receipts according to its documented limits and owns dispatch, execution and cancellation. [Pinned Runs reference](https://github.com/NousResearch/hermes-agent/blob/caafe5389ae585ef77387a962aee05b1bcf17029/website/docs/user-guide/features/api-server.md#runs-api-streaming-friendly-alternative)
 
 ## Live verification
 

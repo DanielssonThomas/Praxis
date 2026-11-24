@@ -127,6 +127,7 @@ export async function approvalRoutesFromEnv() {
       await advance;
       store.close();
     },
+    list: () => service.list(),
     serve,
   };
 }
