@@ -16,3 +16,7 @@ npm run build
 `npm test` builds the workspace before running tests against its public package APIs. The [CI workflow](.github/workflows/ci.yml) runs the same commands on a fresh Linux runner.
 
 Read [contributor instructions](AGENTS.md) before working on an issue. See the [architecture](docs/architecture.md) for the runtime and contract boundaries and the [Hermes feasibility review](docs/hermes-feasibility.md) for native integration candidates and open checks.
+
+## Settings
+
+After building, run `npm start` and open the printed local settings URL. See [portable settings](docs/settings.md) for the file location, format and policy boundary.
