@@ -17,6 +17,6 @@ npm run build
 
 Read [contributor instructions](AGENTS.md) before working on an issue. See the [architecture](docs/architecture.md) for the runtime and contract boundaries and the [Hermes feasibility review](docs/hermes-feasibility.md) for native integration candidates and open checks.
 
-## Settings
+## Application shell
 
-After building, run `npm start` and open the printed local settings URL. See [portable settings](docs/settings.md) for the file location, format and policy boundary.
+After building, run `npm start` and open the printed local URL. Open **Menu** to switch views, or run `/help` in the command bar. See [navigation and browser checks](docs/shell.md) and [portable settings](docs/settings.md).

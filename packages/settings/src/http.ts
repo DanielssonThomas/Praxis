@@ -18,11 +18,17 @@ class RequestError extends Error {
   }
 }
 
-function send(response: ServerResponse, status: number, type: string, body: string | Buffer): void {
+function send(
+  response: ServerResponse,
+  status: number,
+  type: string,
+  body: string | Buffer,
+  ancestors = "'none'",
+): void {
   response.writeHead(status, {
     "Content-Type": type,
     "Cache-Control": "no-store",
-    "Content-Security-Policy": "default-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+    "Content-Security-Policy": `default-src 'self'; object-src 'none'; frame-ancestors ${ancestors}; base-uri 'none'`,
     "X-Content-Type-Options": "nosniff",
   });
   response.end(body);
@@ -67,7 +73,7 @@ export async function serveSettings(request: IncomingMessage, response: ServerRe
       if (asset === undefined) {
         send(response, 200, jsonType, JSON.stringify(await readSettings(path)));
       } else {
-        send(response, 200, asset.type, await readFile(asset.url));
+        send(response, 200, asset.type, await readFile(asset.url), url === "/settings" ? "'self'" : "'none'");
       }
     } else if (request.method === "PUT" && url === settingsApi) {
       if (request.headers.origin !== origin.origin) throw new RequestError(403, "Save settings from the local Praxis editor.");
