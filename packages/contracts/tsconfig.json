@@ -1,9 +1,6 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "strict": true,
-    "verbatimModuleSyntax": true,
     "declaration": true,
     "rootDir": "src",
     "outDir": "dist"
