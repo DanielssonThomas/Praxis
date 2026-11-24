@@ -8,4 +8,6 @@ Worker reports and pending action requests can include canonical event details. 
 
 Record writes return `inserted` for a new identity and `duplicate` when the canonical record already exists. Distinct content with the same ID raises `identity_conflict`. SQLite enforces unique IDs across connections, and every event and usage identity contributes at most one record. Use a stable ID when replaying the same observation. A measured zero remains a measurement, while unavailable usage preserves the source's reason.
 
+`recordUsageObservation` stores reported usage and its `usage.observed` event in one transaction. Replaying the same usage preserves its first saved observation time. Existing compatible usage records or observations are reused. A conflicting identity rolls back any writes from that attempt.
+
 A lookup for a valid ID with no record returns `undefined`. Invalid input, missing references, unsupported database versions and storage failures raise `OperationalStoreError` with distinct codes. All storage activity stays in the caller's local database. The package makes no telemetry or network calls.

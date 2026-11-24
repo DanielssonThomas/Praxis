@@ -11,4 +11,6 @@ Chart.js shows 7, 30 or 90 days up to the selected retention limit. Days use UTC
 | Reported tokens and reported USD cost | `usage.observed` references to immutable usage records, counted once per usage ID. Token totals require both input and output values on the record. Costs use reported USD amounts. Unknown values are gaps, with explicitly measured zero retained. |
 | Operator interventions | First human approve or deny `action.decision` per request. |
 
-Praxis can project receipts already present in its operational store. Native board issue links verify issue identity. Production PR and ticket-lifecycle ingestion and automatic recording of runtime usage observations still need source integration. The Reports browser fixture supplies deterministic local receipts and uses the same app and database as the running view.
+Opening an authorized Overview records available usage from settled Hermes runs. Reports groups those records by the UTC day of their first saved observation. Runs without an observed measurement leave gaps in the chart. The adapter currently reports input and output tokens when Hermes supplies them.
+
+Native board issue links verify issue identity. Production PR and ticket-lifecycle ingestion still needs source integration. The deterministic Reports fixture and the live Overview fixture both use the same app and database as the running view.
