@@ -10,7 +10,7 @@ Build and run `npm start`, then open the printed loopback address. Open the menu
 | `/settings` | `/s` | Open the local settings editor |
 | `/help` | `/h` | List the commands |
 
-Command lookup and feedback run in the browser. Manager conversation and session data are tracked in [#8](https://github.com/DanielssonThomas/Praxis/issues/8) and [#9](https://github.com/DanielssonThomas/Praxis/issues/9).
+Command lookup and feedback run in the browser. Configure [Overview](overview.md) to attach real session output to the shell. Manager conversation rendering is tracked in [#8](https://github.com/DanielssonThomas/Praxis/issues/8).
 
 When configured, **Activity** opens the operator review panel and keeps the same cards visible as you switch views. See [scoped approvals](approvals.md) for setup.
 

@@ -60,22 +60,25 @@ async function providerFixture(respond) {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
     const call = JSON.parse(Buffer.concat(chunks).toString());
-    const { message, finishReason = "stop" } = await respond(call);
+    const { message, finishReason = "stop", holdAfterMessage } = await respond(call);
 
     const base = { id: "chatcmpl-praxis-fixture", created: 1, model: "fake-model" };
     const usage = { prompt_tokens: 8, completion_tokens: 8, total_tokens: 16 };
     if (call.stream) {
       response.writeHead(200, { "Content-Type": "text/event-stream" });
-      const frame = (choices) => `data: ${JSON.stringify({ ...base, object: "chat.completion.chunk", choices })}\n\n`;
+      const frame = (choices, extra = {}) => `data: ${JSON.stringify({ ...base, object: "chat.completion.chunk", choices, ...extra })}\n\n`;
       const { tool_calls, ...fields } = message;
       const delta = tool_calls === undefined ? fields : {
         ...fields,
         tool_calls: tool_calls.map((tool, index) => ({ ...tool, index })),
       };
       response.write(frame([{ index: 0, delta, finish_reason: null }]));
+      await holdAfterMessage;
       response.write(frame([{ index: 0, delta: {}, finish_reason: finishReason }]));
+      response.write(frame([], { usage }));
       response.end("data: [DONE]\n\n");
     } else {
+      await holdAfterMessage;
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({
         ...base,

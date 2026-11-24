@@ -6,8 +6,10 @@ import {
   sessionIdSchema,
   sessionSchema,
   taskIdSchema,
+  usageSchema,
 } from "@praxis/contracts";
-import type { RuntimeOutput, RuntimeSessionSnapshot, RuntimeSessionStatus } from "@praxis/contracts";
+import type { RuntimeOutput, RuntimeSessionSnapshot, RuntimeSessionStatus, Usage } from "@praxis/contracts";
+import { createParser } from "eventsource-parser";
 import { z } from "zod";
 
 const runId = z.string().regex(/^run_[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
@@ -29,6 +31,18 @@ const receiptSchema = z.object({
   session_id: z.string(),
   status: z.string(),
   output: z.string().nullish(),
+  usage: z.unknown().optional(),
+});
+const nativeUsageSchema = z.object({
+  input_tokens: z.int().nonnegative().optional(),
+  output_tokens: z.int().nonnegative().optional(),
+});
+const nativeStreamEvent = z.object({
+  event: z.string(),
+  run_id: runId,
+  seq: z.int().nonnegative().optional(),
+  delta: z.unknown().optional(),
+  output: z.unknown().optional(),
 });
 const creationSchema = z.object({ run_id: runId });
 const stopSchema = z.object({ run_id: runId.optional(), status: z.string() });
@@ -41,6 +55,18 @@ export interface HermesCapabilities {
   stop: Capability;
   liveOutput: Capability;
   kanban: Capability;
+}
+
+export interface HermesOutputCursor {
+  runId: string;
+  seq: number;
+  output: RuntimeOutput;
+  truncated: boolean;
+}
+
+interface RunInspection {
+  snapshot: RuntimeSessionSnapshot;
+  usage: Usage;
 }
 
 type RuntimeErrorCode =
@@ -112,6 +138,22 @@ function normalizeOutput(text: string | null | undefined): RuntimeOutput {
   return { availability: "available", text: tail, truncated };
 }
 
+function normalizeUsage(value: unknown, assignment: HermesAssignment): Usage {
+  const observed = nativeUsageSchema.safeParse(value);
+  const identity = {
+    schemaVersion: contractVersion,
+    id: `usage_${createHash("sha256").update(assignment.sessionId).update("\0").update(assignment.runId).digest("hex")}`,
+    sessionId: assignment.sessionId,
+  };
+  if (observed.success && (observed.data.input_tokens !== undefined || observed.data.output_tokens !== undefined)) {
+    return usageSchema.parse({
+      ...identity, metering: "reported",
+      inputTokens: observed.data.input_tokens, outputTokens: observed.data.output_tokens,
+    });
+  }
+  return usageSchema.parse({ ...identity, metering: "unknown", reason: "Hermes has not reported usage for this run." });
+}
+
 export class HermesRuntime {
   readonly #origin: URL;
   readonly #apiKey: string;
@@ -132,7 +174,7 @@ export class HermesRuntime {
       submission: nativeFeature(features, "run_submission"),
       inspection: nativeFeature(features, "run_status"),
       stop: nativeFeature(features, "run_stop"),
-      liveOutput: { available: false, reason: "The adapter reads run receipts. Live stream attachment is unavailable." },
+      liveOutput: nativeFeature(features, "run_events_sse"),
       kanban: { available: false, reason: "The Runs API has no Kanban board control." },
     };
   }
@@ -155,7 +197,36 @@ export class HermesRuntime {
   async inspectAssignment(value: unknown): Promise<RuntimeSessionSnapshot> {
     const assignment = parse(hermesAssignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
     requireCapability((await this.capabilities()).inspection);
-    return this.#readRun(assignment);
+    return (await this.#readRun(assignment)).snapshot;
+  }
+
+  async inspectLiveAssignment(value: unknown, previous?: HermesOutputCursor): Promise<RunInspection & { cursor?: HermesOutputCursor }> {
+    const assignment = parse(hermesAssignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
+    const capabilities = await this.capabilities();
+    requireCapability(capabilities.inspection);
+    const inspected = await this.#readRun(assignment);
+    const { snapshot } = inspected;
+    if (snapshot.status !== "queued" && snapshot.status !== "running" && snapshot.status !== "waiting_for_approval"
+      && snapshot.status !== "stopping") {
+      if (snapshot.output.availability === "unavailable" && previous?.runId === assignment.runId
+        && previous.output.availability === "available") {
+        return { ...inspected, snapshot: { ...snapshot, output: previous.output }, cursor: previous };
+      }
+      return inspected;
+    }
+    if (!capabilities.liveOutput.available) {
+      return snapshot.output.availability === "available" ? inspected : {
+        ...inspected,
+        snapshot: { ...snapshot, output: { availability: "unavailable", reason: capabilities.liveOutput.reason } },
+      };
+    }
+    const cursor = await this.#readLiveOutput(assignment, previous);
+    return {
+      ...inspected,
+      snapshot: { ...snapshot, output: cursor.output.availability === "available" ? cursor.output
+        : snapshot.output.availability === "available" ? snapshot.output : cursor.output },
+      cursor,
+    };
   }
 
   async stopAssignment(value: unknown, authorize?: () => Promise<void>): Promise<RuntimeSessionSnapshot> {
@@ -164,7 +235,7 @@ export class HermesRuntime {
     requireCapability(stop);
     requireCapability(inspection);
 
-    const state = await this.#readRun(assignment);
+    const { snapshot: state } = await this.#readRun(assignment);
     if (state.status === "unknown") {
       throw new HermesRuntimeError("unsupported", "Hermes did not report a controllable run state.");
     }
@@ -177,25 +248,104 @@ export class HermesRuntime {
       throw new HermesRuntimeError("assignment_mismatch", "Hermes acknowledged a different run.");
     }
     if (stopped.status === "stopping") return { ...state, status: "stopping" };
-    return this.#readRun(assignment);
+    return (await this.#readRun(assignment)).snapshot;
   }
 
-  async #readRun(assignment: HermesAssignment): Promise<RuntimeSessionSnapshot> {
+  async #readRun(assignment: HermesAssignment): Promise<RunInspection> {
     const value = await this.#request(`/v1/runs/${assignment.runId}`);
     const receipt = parse(receiptSchema, value, "invalid_response", "Hermes returned an invalid run receipt.");
     if (receipt.run_id !== assignment.runId || receipt.session_id !== nativeSessionFor(assignment.taskId, assignment.sessionId)) {
       throw new HermesRuntimeError("assignment_mismatch", "The Hermes run does not match the Praxis assignment.");
     }
     return {
-      schemaVersion: contractVersion,
-      taskId: assignment.taskId,
-      sessionId: assignment.sessionId,
-      status: normalizeStatus(receipt.status),
-      output: normalizeOutput(receipt.output),
+      snapshot: {
+        schemaVersion: contractVersion,
+        taskId: assignment.taskId,
+        sessionId: assignment.sessionId,
+        status: normalizeStatus(receipt.status),
+        output: normalizeOutput(receipt.output),
+      },
+      usage: normalizeUsage(receipt.usage, assignment),
     };
   }
 
-  async #request(path: string, options: RequestInit = {}): Promise<unknown> {
+  async #readLiveOutput(assignment: HermesAssignment, previous?: HermesOutputCursor): Promise<HermesOutputCursor> {
+    const cursor: HermesOutputCursor = previous?.runId === assignment.runId ? previous : {
+      runId: assignment.runId,
+      seq: -1,
+      truncated: false,
+      output: { availability: "unavailable", reason: "Hermes has not published live output." },
+    };
+    let seq = cursor.seq;
+    let output = cursor.output;
+    let truncated = cursor.truncated;
+    const parser = createParser({
+      onEvent(frame) {
+        let decoded: unknown;
+        try {
+          decoded = JSON.parse(frame.data);
+        } catch {
+          throw new HermesRuntimeError("invalid_response", "Hermes returned a malformed stream event.");
+        }
+        const event = parse(nativeStreamEvent, decoded, "invalid_response", "Hermes returned an invalid stream event.");
+        if (event.run_id !== assignment.runId) {
+          throw new HermesRuntimeError("assignment_mismatch", "A Hermes stream event belongs to another run.");
+        }
+        if (event.event === "replay.truncated") {
+          truncated = true;
+          if (output.availability === "available") output = { ...output, truncated: true };
+          return;
+        }
+        if (event.seq === undefined || event.seq <= seq) return;
+        seq = event.seq;
+        if (event.event === "message.delta" && typeof event.delta === "string") {
+          const prefix = output.availability === "available" ? output.text : "";
+          output = normalizeOutput(prefix + event.delta);
+          if (output.availability === "available") {
+            truncated ||= output.truncated;
+            if (truncated) output = { ...output, truncated: true };
+          }
+        } else if (event.event === "run.completed" && typeof event.output === "string") {
+          output = normalizeOutput(event.output);
+          truncated = output.availability === "available" && output.truncated;
+        }
+      },
+    });
+    const headers: Record<string, string> = { Accept: "text/event-stream" };
+    if (seq >= 0) headers["Last-Event-ID"] = String(seq);
+    const signal = AbortSignal.timeout(350);
+    try {
+      const response = await this.#response(`/v1/runs/${assignment.runId}/events`, { headers, signal });
+      if (!response.headers.get("content-type")?.startsWith("text/event-stream") || response.body === null) {
+        await response.body?.cancel();
+        throw new HermesRuntimeError("invalid_response", "Hermes did not provide a run event stream.");
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          parser.feed(decoder.decode(value, { stream: true }));
+        }
+        parser.feed(decoder.decode());
+      } finally {
+        await reader.cancel().catch(() => {});
+      }
+    } catch (error) {
+      if (error instanceof HermesRuntimeError && error.code === "not_found") {
+        if (output.availability === "unavailable") {
+          output = { availability: "unavailable", reason: "The native Hermes stream is unavailable or its replay buffer expired." };
+        }
+      } else if (!signal.aborted || (error instanceof HermesRuntimeError
+        && (error.code === "assignment_mismatch" || error.code === "invalid_response"))) {
+        throw error;
+      }
+    }
+    return { runId: assignment.runId, seq, output, truncated };
+  }
+
+  async #response(path: string, options: RequestInit = {}): Promise<Response> {
     const headers = new Headers(options.headers);
     headers.set("Authorization", `Bearer ${this.#apiKey}`);
     if (options.body !== undefined) headers.set("Content-Type", "application/json");
@@ -206,7 +356,7 @@ export class HermesRuntime {
         ...options,
         headers,
         redirect: "error",
-        signal: AbortSignal.timeout(10_000),
+        signal: options.signal ?? AbortSignal.timeout(10_000),
       });
     } catch (error) {
       throw new HermesRuntimeError("unavailable", "Could not reach the local Hermes API.", { cause: error });
@@ -223,6 +373,11 @@ export class HermesRuntime {
       const code = response.status >= 500 || response.status === 429 ? "unavailable" : "native_refused";
       throw new HermesRuntimeError(code, `Hermes refused the API request (HTTP ${response.status}).`);
     }
+    return response;
+  }
+
+  async #request(path: string, options: RequestInit = {}): Promise<unknown> {
+    const response = await this.#response(path, options);
     try {
       return await response.json();
     } catch (error) {

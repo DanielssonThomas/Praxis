@@ -8,8 +8,9 @@
   <script type="module" src="/assets/shell.js"></script>
   <script type="module" src="/assets/activity.js"></script>
   <script type="module" src="/assets/kanban.js"></script>
+  <script type="module" src="/assets/overview.js"></script>
 </head>
-<body data-activity="unavailable" data-kanban="unavailable">
+<body data-activity="unavailable" data-kanban="unavailable" data-overview="unavailable">
   <header id="shell-header">
     <div class="header-row">
       <span class="brand">Praxis</span>
@@ -29,8 +30,18 @@
     <section class="view" data-view="manager" aria-labelledby="manager-title">
       <h1 id="manager-title">Manager</h1>
     </section>
-    <section class="view" data-view="overview" aria-labelledby="overview-title" hidden>
-      <h1 id="overview-title">Overview</h1>
+    <section class="view overview-view" data-view="overview" aria-labelledby="overview-title" hidden>
+      <div class="overview-heading">
+        <h1 id="overview-title">Overview</h1>
+        <button id="overview-lock" type="button" hidden>Lock overview</button>
+      </div>
+      <form id="overview-auth" aria-label="Open Overview" autocomplete="off" hidden>
+        <label>Operator token <input type="password" name="operatorToken" required></label>
+        <button type="submit">Open overview</button>
+      </form>
+      <p id="overview-status" role="status">Configure the local Hermes connection to view session output.</p>
+      <p id="overview-association" hidden></p>
+      <div id="overview-grid" aria-label="Session panes" hidden></div>
     </section>
     <section class="view" data-view="kanban" aria-labelledby="kanban-title" hidden>
       <div class="kanban-heading">
