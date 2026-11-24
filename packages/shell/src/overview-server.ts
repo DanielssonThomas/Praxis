@@ -10,7 +10,7 @@ import { HermesRuntime, HermesRuntimeError } from "@praxis/hermes-runtime";
 import type { HermesOutputCursor } from "@praxis/hermes-runtime";
 import { mcpAuthoritySchema } from "@praxis/mcp";
 import type { McpGrant } from "@praxis/mcp";
-import { OperationalStore } from "@praxis/state";
+import { OperationalStore, OperationalStoreError } from "@praxis/state";
 import { SessionControlError, SessionControlService } from "./session-control.js";
 import type { ControlBinding, SessionControlView } from "./session-control.js";
 
@@ -23,12 +23,14 @@ export interface OverviewPane {
   highlighted: boolean;
   runtime: PaneRuntime;
   control: SessionControlView;
+  usageNotice?: string;
 }
 export interface OverviewProjection {
   panes: OverviewPane[];
   association: { available: true } | { available: false; reason: string };
 }
 const paneLimit = 10;
+const settledStatuses = new Set<RuntimeSessionSnapshot["status"]>(["completed", "failed", "stopped", "interrupted"]);
 interface OverviewOptions {
   store: OperationalStore;
   runtime: Pick<HermesRuntime, "inspectLiveAssignment">;
@@ -118,8 +120,19 @@ export class OverviewService {
         const reason = error instanceof HermesRuntimeError ? error.message : "The native session is unavailable.";
         observed = { availability: "unavailable", reason };
       }
+      let usageNotice: string | undefined;
+      if (observed.availability === "available" && observed.usage.metering === "reported"
+        && settledStatuses.has(observed.snapshot.status)) {
+        try {
+          store.recordUsageObservation(observed.usage, new Date().toISOString());
+        } catch (error) {
+          usageNotice = error instanceof OperationalStoreError && error.code === "identity_conflict"
+            ? "A local record conflicts with this Reports measurement."
+            : "Could not save runtime usage to Reports.";
+        }
+      }
       return {
-        task, session, ticket, runtime: observed, highlighted: session.id === highlighted,
+        task, session, ticket, runtime: observed, usageNotice, highlighted: session.id === highlighted,
         control: controls.view(binding, observed.availability === "available" && observed.snapshot.status === "running"),
       };
     }));

@@ -159,6 +159,8 @@ test("ten real native sessions show live output, exclusive expansion and scoped 
   await primary.getByText(fragment).waitFor();
   assert.equal(usedStreaming, true);
   assert.equal((await gateway.runtime.inspectAssignment(assignments[0])).status, "running");
+  assert.equal(store.eventsOfKind("usage.observed").length, 9,
+    "Overview recorded settled sessions while the active run remained unrecorded");
   await secondary.getByText(/native long output tail/).waitFor();
   assert.ok((await secondary.getByLabel("Session output").textContent()).length <= runtimeOutputLimit + 24);
   assert.equal(await page.evaluate(() => document.querySelector("#overview-grid").getBoundingClientRect().bottom
@@ -204,12 +206,31 @@ test("ten real native sessions show live output, exclusive expansion and scoped 
   release();
   await until(async () => (await gateway.runtime.inspectAssignment(assignments[0])).status === "completed",
     "The selected native worker did not continue after denial");
+  const observations = await until(() => {
+    const receipts = store.eventsOfKind("usage.observed");
+    return receipts.length === 10 ? receipts : false;
+  }, "Overview did not save the completed worker's measured usage");
+  const usage = observations.map(({ subject }) => store.getUsage(subject.id));
+  assert.equal(new Set(usage.map(({ sessionId }) => sessionId)).size, 10);
+  assert.ok(usage.every(({ metering, inputTokens, outputTokens }) => metering === "reported"
+    && inputTokens === 8 && outputTokens === 8));
+
+  await command(page, "/reports");
+  const reports = page.getByRole("form", { name: "Open Reports" });
+  await reports.getByLabel("Operator token").fill(operator);
+  await reports.getByRole("button", { name: "Open reports" }).click();
+  const chart = page.getByRole("img", { name: "Reported tokens by day (UTC)" });
+  await chart.waitFor();
+  assert.equal(await chart.evaluate((canvas) => window.Chart.getChart(canvas).data.datasets[0].data
+    .reduce((total, value) => total + (value ?? 0), 0)), 160);
 
   const reduced = await browser.newPage({ reducedMotion: "reduce", viewport: { width: 360, height: 620 } });
   await reduced.goto(shell.origin);
   await command(reduced, "/o");
   assert.equal(await reduced.locator('[data-view="overview"]').evaluate((view) => getComputedStyle(view).animationName), "none");
   await openOverview(reduced);
+  assert.deepEqual(store.eventsOfKind("usage.observed"), observations,
+    "Opening a new view did not create duplicate usage or redate the original observations");
   assert.equal(await reduced.locator(".session-pane").first().evaluate((pane) => getComputedStyle(pane).transitionDuration), "0s");
-  t.diagnostic("Ten real sessions, native live/replayed and bounded output, measured usage, exclusive expansion, manager focus and reduced motion passed.");
+  t.diagnostic("Ten real sessions, native live/replayed and bounded output, durable native usage in Reports, exclusive expansion, manager focus and reduced motion passed.");
 });

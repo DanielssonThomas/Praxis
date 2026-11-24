@@ -8,7 +8,9 @@ Set `PRAXIS_OVERVIEW_MANAGER_PRINCIPAL_ID` to the configured manager principal f
 
 Native output reads resume from the recent event sequence. Hermes can expire an unconsumed buffer. Overview reports unavailable output or an omitted prefix when the native stream cannot supply the full excerpt. An authoritative final receipt supplies available terminal output. Native usage is displayed when the run reports it.
 
-After building, set `PRAXIS_HERMES_BIN` and run `npm run test:overview:live`. The target fixture exercises the mounted Manager view, ten real Hermes runs, native output, Chromium motion preferences and a configured manager principal submitting its action through native MCP. The full Manager conversation is tracked in [#8](https://github.com/DanielssonThomas/Praxis/issues/8).
+When authorized Overview inspection observes reported usage for an exact settled run, Praxis saves the measurement once for local reporting. The expanded pane flags a persistence conflict or failure alongside the native result. [Local Reports](reports.md)
+
+After building, set `PRAXIS_HERMES_BIN` and run `npm run test:overview:live`. The target fixture exercises the mounted Manager view, ten real Hermes runs, native output, the reported tokens chart, Chromium motion preferences and a configured manager principal submitting its action through native MCP. The full Manager conversation is tracked in [#8](https://github.com/DanielssonThomas/Praxis/issues/8).
 
 ## Manual session control
 
