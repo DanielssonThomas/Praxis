@@ -9,8 +9,8 @@
   },
   "scripts": {
     "test": "npm run build && node --test",
-    "typecheck": "tsc --project packages/contracts/tsconfig.json --noEmit",
-    "build": "tsc --project packages/contracts/tsconfig.json"
+    "typecheck": "tsc --project tsconfig.json",
+    "build": "tsc --project packages/contracts/tsconfig.json && tsc --project packages/state/tsconfig.json"
   },
   "devDependencies": {
     "typescript": "5.9.3"
