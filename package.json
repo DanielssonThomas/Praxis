@@ -1,0 +1,18 @@
+{
+  "name": "praxis",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "engines": {
+    "node": "24.x",
+    "npm": "11.x"
+  },
+  "scripts": {
+    "test": "npm run build && node --test",
+    "typecheck": "tsc --project packages/contracts/tsconfig.json --noEmit",
+    "build": "tsc --project packages/contracts/tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
