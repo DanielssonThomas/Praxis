@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import {
+  actionIdSchema,
   eventIdSchema,
   eventSchema,
   sessionIdSchema,
@@ -11,9 +12,23 @@ import {
 } from "@praxis/contracts";
 import type { Event, Session, Task, Usage } from "@praxis/contracts";
 import type { ZodType } from "zod";
+import { z } from "zod";
 
 type StoredRecord = Task | Session | Event | Usage;
 type WriteResult = "inserted" | "duplicate";
+const digest = z.string().regex(/^[a-f0-9]{64}$/);
+const controlStateSchema = z.discriminatedUnion("mode", [
+  z.strictObject({ mode: z.literal("automated_write"), revision: z.uuid(), actionId: actionIdSchema }),
+  z.strictObject({
+    mode: z.literal("manual"), revision: z.uuid(), assignmentDigest: digest,
+    pending: z.strictObject({
+      afterMessageId: z.int().nonnegative(),
+      textDigest: digest,
+      outcome: z.enum(["submitting", "accepted", "uncertain"]),
+    }).optional(),
+  }),
+]);
+export type SessionControlState = z.infer<typeof controlStateSchema>;
 type StoreErrorCode =
   | "invalid_record"
   | "identity_conflict"
@@ -66,7 +81,12 @@ function initialize(database: DatabaseSync): void {
     database.exec(`
       CREATE INDEX IF NOT EXISTS operational_events_by_kind
         ON operational_records(json_extract(payload, '$.kind'), sequence)
-        WHERE subject_id IS NOT NULL
+        WHERE subject_id IS NOT NULL;
+      CREATE TABLE IF NOT EXISTS session_controls (
+        session_id TEXT PRIMARY KEY REFERENCES operational_records(id),
+        revision TEXT NOT NULL,
+        payload TEXT NOT NULL
+      ) STRICT
     `);
     database.exec("COMMIT");
   } catch (error) {
@@ -140,6 +160,55 @@ export class OperationalStore {
       WHERE subject_id IS NOT NULL AND json_extract(payload, '$.kind') = ?
       ORDER BY sequence
     `).all(kind).map((row) => eventSchema.parse(JSON.parse(String(row.payload)))));
+  }
+
+  sessionControl(id: string): SessionControlState | undefined {
+    const sessionId = parseInput(sessionIdSchema, id);
+    return storage("read", () => {
+      const row = this.#database.prepare("SELECT payload FROM session_controls WHERE session_id = ?").get(sessionId);
+      return row === undefined ? undefined : controlStateSchema.parse(JSON.parse(String(row.payload)));
+    });
+  }
+
+  compareSessionControl(
+    id: string, expected: string | undefined, next: SessionControlState | undefined, event?: Event,
+  ): boolean {
+    const sessionId = parseInput(sessionIdSchema, id);
+    const revision = expected === undefined ? undefined : parseInput(z.uuid(), expected);
+    const state = next === undefined ? undefined : parseInput(controlStateSchema, next);
+    const observed = event === undefined ? undefined : parseInput(eventSchema, event);
+    const compare = () => {
+      if (state === undefined) {
+        if (revision === undefined) return false;
+        return this.#database.prepare("DELETE FROM session_controls WHERE session_id = ? AND revision = ?")
+          .run(sessionId, revision).changes === 1;
+      }
+      const payload = JSON.stringify(state);
+      if (revision === undefined) {
+        return this.#database.prepare(`
+          INSERT INTO session_controls (session_id, revision, payload) VALUES (?, ?, ?)
+          ON CONFLICT(session_id) DO NOTHING
+        `).run(sessionId, state.revision, payload).changes === 1;
+      }
+      return this.#database.prepare(`
+        UPDATE session_controls SET revision = ?, payload = ? WHERE session_id = ? AND revision = ?
+      `).run(state.revision, payload, sessionId, revision).changes === 1;
+    };
+    return storage("write", () => {
+      if (observed === undefined) return compare();
+      this.#database.exec("BEGIN IMMEDIATE");
+      try {
+        const changed = compare();
+        if (changed && this.#write(observed, { subjectId: observed.subject.id }) !== "inserted") {
+          throw new OperationalStoreError("identity_conflict", "The control event was already recorded");
+        }
+        this.#database.exec("COMMIT");
+        return changed;
+      } catch (error) {
+        this.#database.exec("ROLLBACK");
+        throw error;
+      }
+    });
   }
 
   #read<T>(id: string, schema: ZodType<T>): T | undefined {

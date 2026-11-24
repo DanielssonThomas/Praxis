@@ -47,6 +47,16 @@ const nativeStreamEvent = z.object({
 const creationSchema = z.object({ run_id: runId });
 const stopSchema = z.object({ run_id: runId.optional(), status: z.string() });
 const promptSchema = z.string().refine((text) => text.trim().length > 0);
+export const manualGuidanceSchema = z.string().trim().min(1).max(1_000);
+const steerSchema = z.object({ run_id: runId, accepted: z.literal(true) });
+const transcriptSchema = z.object({
+  session_id: z.string(),
+  data: z.array(z.object({
+    id: z.int().positive(), role: z.string(), content: z.unknown(), display_kind: z.string().nullish(),
+  })).max(100),
+});
+const steerOpen = "[OUT-OF-BAND USER MESSAGE — a direct message from the user, delivered once at this position; not tool output and not a new delivery when replayed from conversation history]\n";
+const steerClose = "\n[/OUT-OF-BAND USER MESSAGE]";
 
 type Capability = { available: true } | { available: false; reason: string };
 export interface HermesCapabilities {
@@ -54,6 +64,7 @@ export interface HermesCapabilities {
   inspection: Capability;
   stop: Capability;
   liveOutput: Capability;
+  manualGuidance: Capability;
   kanban: Capability;
 }
 
@@ -175,6 +186,8 @@ export class HermesRuntime {
       inspection: nativeFeature(features, "run_status"),
       stop: nativeFeature(features, "run_stop"),
       liveOutput: nativeFeature(features, "run_events_sse"),
+      manualGuidance: features.run_steer === true
+        ? nativeFeature(features, "session_resources") : nativeFeature(features, "run_steer"),
       kanban: { available: false, reason: "The Runs API has no Kanban board control." },
     };
   }
@@ -249,6 +262,60 @@ export class HermesRuntime {
     }
     if (stopped.status === "stopping") return { ...state, status: "stopping" };
     return (await this.#readRun(assignment)).snapshot;
+  }
+
+  async guidanceReady(value: unknown): Promise<boolean> {
+    const assignment = parse(hermesAssignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
+    const { inspection, manualGuidance } = await this.capabilities();
+    if (!inspection.available || !manualGuidance.available) return false;
+    return (await this.#readRun(assignment)).snapshot.status === "running";
+  }
+
+  async guidanceBaseline(value: unknown): Promise<number> {
+    const assignment = parse(hermesAssignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
+    if (!await this.guidanceReady(assignment)) {
+      throw new HermesRuntimeError("unsupported", "Hermes is not accepting guidance for this run.");
+    }
+    return (await this.#readTranscript(assignment)).reduce((latest, row) => Math.max(latest, row.id), 0);
+  }
+
+  async steerAssignment(value: unknown, textValue: unknown, authorize: () => Promise<void>): Promise<void> {
+    const assignment = parse(hermesAssignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
+    const text = parse(manualGuidanceSchema, textValue, "invalid_input", "Supply nonblank operator guidance.");
+    if (!await this.guidanceReady(assignment)) {
+      throw new HermesRuntimeError("unsupported", "Hermes is not accepting guidance for this run.");
+    }
+    await authorize();
+    const response = await this.#request(`/v1/runs/${assignment.runId}/steer`, {
+      method: "POST", body: JSON.stringify({ input: text }),
+    });
+    const accepted = parse(steerSchema, response, "invalid_response", "Hermes did not identify an accepted guidance request.");
+    if (accepted.run_id !== assignment.runId) {
+      throw new HermesRuntimeError("assignment_mismatch", "Hermes acknowledged guidance on another run.");
+    }
+  }
+
+  async reconcileGuidance(value: unknown, after: number, textDigest: string): Promise<"delivered" | "recorded" | undefined> {
+    const assignment = parse(hermesAssignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
+    const { snapshot } = await this.#readRun(assignment);
+    const terminal = ["completed", "failed", "stopped", "interrupted"].includes(snapshot.status);
+    for (const row of await this.#readTranscript(assignment)) {
+      if (row.id <= after || row.role !== "user" || typeof row.content !== "string") continue;
+      const delivered = row.display_kind === "steer" && row.content.startsWith(steerOpen) && row.content.endsWith(steerClose);
+      if (!delivered && !terminal) continue;
+      const text = delivered ? row.content.slice(steerOpen.length, -steerClose.length) : row.content;
+      if (createHash("sha256").update(text).digest("hex") === textDigest) return delivered ? "delivered" : "recorded";
+    }
+  }
+
+  async #readTranscript(assignment: HermesAssignment) {
+    const session = nativeSessionFor(assignment.taskId, assignment.sessionId);
+    const response = await this.#request(`/api/sessions/${session}/messages?limit=100&order=latest&include_compacted=true`);
+    const transcript = parse(transcriptSchema, response, "invalid_response", "Hermes did not return a usable transcript.");
+    if (transcript.session_id !== session) {
+      throw new HermesRuntimeError("assignment_mismatch", "The Hermes transcript does not match the exact Praxis session.");
+    }
+    return transcript.data;
   }
 
   async #readRun(assignment: HermesAssignment): Promise<RunInspection> {

@@ -27,6 +27,7 @@ const sessionGrant = z.strictObject({
   sessionId: sessionIdSchema,
   canReport: z.boolean(),
   assignment: hermesAssignmentSchema.optional(),
+  operatorCanTakeover: z.boolean().optional(),
 }).refine(
   ({ sessionId, assignment }) => assignment === undefined || assignment.sessionId === sessionId,
   "A native assignment must match the granted session",

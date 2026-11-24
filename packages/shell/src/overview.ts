@@ -1,4 +1,5 @@
 import type { OverviewPane, OverviewProjection } from "./overview-server.js";
+import type { SessionControlView } from "./session-control.js";
 
 const view = document.querySelector<HTMLElement>('[data-view="overview"]')!;
 const auth = document.querySelector<HTMLFormElement>("#overview-auth")!;
@@ -16,8 +17,21 @@ interface PaneElements {
   status: HTMLParagraphElement;
   focus: HTMLParagraphElement;
   output: HTMLPreElement;
+  expansion: HTMLDivElement;
   details: HTMLParagraphElement;
+  controls: PaneControls;
   button: HTMLButtonElement;
+}
+interface PaneControls {
+  mode: HTMLParagraphElement;
+  feedback: HTMLParagraphElement;
+  take: HTMLButtonElement;
+  return: HTMLButtonElement;
+  form: HTMLFormElement;
+  text: HTMLTextAreaElement;
+  send: HTMLButtonElement;
+  busy: boolean;
+  view?: SessionControlView;
 }
 const panes = new Map<PaneId, PaneElements>();
 let expanded: PaneId | undefined;
@@ -42,7 +56,7 @@ function setExpansion(): void {
     pane.card.dataset.expanded = String(open);
     pane.button.setAttribute("aria-expanded", String(open));
     pane.button.textContent = open ? "Collapse" : "Expand";
-    pane.details.hidden = !open;
+    pane.expansion.hidden = !open;
   }
 }
 
@@ -71,10 +85,101 @@ function makePane(id: PaneId): PaneElements {
   output.tabIndex = 0;
   output.setAttribute("aria-label", "Session output");
   const details = document.createElement("p");
-  details.id = `details-${id}`;
-  card.append(top, ticket, status, focus, output, details);
+  const expansion = document.createElement("div");
+  expansion.id = `details-${id}`;
+  const controls = makeControls(id, expansion);
+  expansion.prepend(details);
+  card.append(top, ticket, status, focus, output, expansion);
   grid.append(card);
-  return { card, title, ticket, status, focus, output, details, button };
+  return { card, title, ticket, status, focus, output, expansion, details, controls, button };
+}
+
+function makeControls(id: PaneId, parent: HTMLElement): PaneControls {
+  const panel = document.createElement("div");
+  panel.className = "pane-controls";
+  const mode = document.createElement("p");
+  const message = document.createElement("p");
+  message.setAttribute("role", "status");
+  const take = document.createElement("button");
+  take.textContent = "Take over";
+  const handback = document.createElement("button");
+  handback.textContent = "Return control";
+  const form = document.createElement("form");
+  const label = document.createElement("label");
+  label.textContent = "Manual guidance";
+  const text = document.createElement("textarea");
+  text.required = true;
+  text.maxLength = 1_000;
+  text.rows = 2;
+  label.append(text);
+  const send = document.createElement("button");
+  send.type = "submit";
+  send.textContent = "Send guidance";
+  form.append(label, send);
+  panel.append(mode, take, form, handback, message);
+  parent.append(panel);
+  const controls = { mode, feedback: message, take, return: handback, form, text, send, busy: false };
+  take.addEventListener("click", () => { void controlAction(id, controls, "takeover"); });
+  handback.addEventListener("click", () => { void controlAction(id, controls, "return"); });
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void controlAction(id, controls, "guide");
+  });
+  return controls;
+}
+
+function displayControls(controls: PaneControls, state: SessionControlView): void {
+  controls.view = state;
+  let message: string;
+  if (state.mode === "automated_write") message = "Read-only inspection. A scoped action holds native control.";
+  else if (state.mode === "read_only") message = "Read-only inspection";
+  else if (state.guidance === "pending") message = "Manual control. Waiting for Hermes to record guidance.";
+  else if (state.guidance === "uncertain") message = "Manual control. Guidance needs verification in Hermes.";
+  else message = "Manual control";
+  controls.mode.textContent = message;
+  controls.take.hidden = !state.canTakeover;
+  controls.return.hidden = !state.canReturn;
+  controls.form.hidden = !state.canGuide;
+  controls.take.disabled = controls.return.disabled = controls.send.disabled = controls.busy;
+  controls.text.disabled = controls.busy;
+}
+
+async function controlAction(id: PaneId, controls: PaneControls, operation: "takeover" | "guide" | "return"): Promise<void> {
+  const credential = token;
+  if (credential === undefined || controls.busy || controls.view === undefined) return;
+  controls.busy = true;
+  displayControls(controls, controls.view);
+  controls.feedback.textContent = "";
+  try {
+    const body = operation === "guide" ? { operation, sessionId: id, text: controls.text.value } : { operation, sessionId: id };
+    const response = await fetch("/api/overview/control", {
+      method: "POST", headers: { Authorization: `Bearer ${credential}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error ?? "Session control is unavailable.");
+    if (credential !== token) return;
+    const state = data as SessionControlView;
+    displayControls(controls, state);
+    if (operation === "guide") {
+      controls.text.value = "";
+      controls.feedback.textContent = "Hermes accepted this guidance for delivery.";
+    }
+    if (operation === "return") {
+      controls.feedback.textContent = state.guidance === "delivered"
+        ? "Control returned. Hermes delivered the guidance at a tool boundary."
+        : state.guidance === "recorded"
+          ? "Control returned. Hermes recorded the guidance in the transcript."
+          : "Control returned.";
+    }
+  } catch (error) {
+    if (credential === token) {
+      controls.feedback.textContent = error instanceof Error ? error.message : "Session control is unavailable.";
+    }
+  } finally {
+    controls.busy = false;
+    if (credential === token && controls.view !== undefined) displayControls(controls, controls.view);
+  }
 }
 
 function detailsFor(pane: OverviewPane): string {
@@ -117,6 +222,7 @@ function render(projection: OverviewProjection): void {
       elements.output.scrollTop = stick ? elements.output.scrollHeight : scroll;
     }
     elements.details.textContent = detailsFor(pane);
+    if (!elements.controls.busy) displayControls(elements.controls, pane.control);
   }
   setExpansion();
   association.hidden = projection.association.available;
