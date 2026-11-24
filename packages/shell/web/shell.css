@@ -141,6 +141,15 @@ button[type="submit"] { background: var(--accent); color: var(--button-text); bo
   overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
   background: var(--surface); border-radius: 0.3rem; font: 0.83rem/1.45 ui-monospace, monospace;
 }
+.pane-controls {
+  max-block-size: 10rem; overflow: auto; display: grid; justify-items: start;
+  gap: 0.35rem; padding-block: 0.4rem;
+}
+.pane-controls:has(form:not([hidden])) { max-block-size: 14rem; }
+.pane-controls form, .pane-controls label { display: grid; gap: 0.35rem; inline-size: min(100%, 36rem); }
+.pane-controls form button { justify-self: start; }
+.pane-controls textarea { box-sizing: border-box; inline-size: 100%; font: inherit; }
+.session-pane[data-expanded="true"]:has(.pane-controls form:not([hidden])) { min-block-size: 24rem; }
 @media (prefers-reduced-motion: reduce) {
   .overview-view:not([hidden]) { animation: none; }
   .session-pane { transition: none; }

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import { ApprovalService } from "@praxis/approvals";
+import { HermesRuntimeError } from "@praxis/hermes-runtime";
 import { OperationalStore } from "@praxis/state";
 
 const task = { schemaVersion: 1, id: "task_approval", title: "Scoped Runtime Fixture" };
@@ -157,6 +158,16 @@ test("competing operator decisions across SQLite connections claim one execution
   assert.deepEqual(calls, [{ method: "stop", reference: assignment }]);
 });
 
+test("an explicit native refusal settles approval and releases the automated fence", async (t) => {
+  const { service, request, open } = fixture(t, {
+    stop() { throw new HermesRuntimeError("native_refused", "The exact run refused stop."); },
+  });
+  const approval = service();
+  const attention = await approval.inspect(request("native_refused").id);
+  assert.equal((await approval.decide(decision(attention))).state, "invalidated");
+  assert.equal(open().sessionControl(session.id), undefined);
+});
+
 test("independent operator processes share the same durable decision claim", async (t) => {
   const { database, directory, grants, request, service, time } = fixture(t);
   const attention = await service().inspect(request("processes").id);
@@ -219,6 +230,7 @@ test("a claimed or uncertain execution is never reissued after a service restart
   finish(new Error("The fixture connection was lost before acknowledging stop"));
   assert.equal((await original).state, "uncertain");
   assert.equal((await service(open()).list())[0].state, "uncertain");
+  assert.equal(open().sessionControl(session.id).mode, "automated_write");
   assert.equal(calls.length, 1);
 });
 

@@ -1,15 +1,18 @@
 import { readFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolve } from "node:path";
+import { ApprovalError } from "@praxis/approvals";
 import type { ApprovalActivity } from "@praxis/approvals";
-import { localOperatorGuard } from "@praxis/approvals/http";
+import { localOperatorGuard, readOperatorJson } from "@praxis/approvals/http";
 import { principalIdSchema } from "@praxis/contracts";
 import type { RuntimeSessionSnapshot, Session, Task, Usage } from "@praxis/contracts";
 import { HermesRuntime, HermesRuntimeError } from "@praxis/hermes-runtime";
-import type { HermesAssignment, HermesOutputCursor } from "@praxis/hermes-runtime";
+import type { HermesOutputCursor } from "@praxis/hermes-runtime";
 import { mcpAuthoritySchema } from "@praxis/mcp";
 import type { McpGrant } from "@praxis/mcp";
 import { OperationalStore } from "@praxis/state";
+import { SessionControlError, SessionControlService } from "./session-control.js";
+import type { ControlBinding, SessionControlView } from "./session-control.js";
 
 type PaneRuntime = { availability: "available"; snapshot: RuntimeSessionSnapshot; usage: Usage }
   | { availability: "unavailable"; reason: string };
@@ -19,6 +22,7 @@ export interface OverviewPane {
   ticket: string;
   highlighted: boolean;
   runtime: PaneRuntime;
+  control: SessionControlView;
 }
 export interface OverviewProjection {
   panes: OverviewPane[];
@@ -31,22 +35,23 @@ interface OverviewOptions {
   loadGrants: () => Promise<McpGrant[]>;
   loadActivity?: () => Promise<ApprovalActivity[]>;
   managerPrincipal?: string;
+  controls: SessionControlService;
 }
 
-function assignmentsFor(grants: McpGrant[]): HermesAssignment[] {
-  const registered = new Map<string, HermesAssignment>();
+function assignmentsFor(grants: McpGrant[]): ControlBinding[] {
+  const registered = new Map<string, ControlBinding>();
   const conflicting = new Set<string>();
   for (const grant of grants) {
-    for (const { sessionId, assignment } of grant.sessions) {
+    for (const { sessionId, assignment, operatorCanTakeover } of grant.sessions) {
       if (assignment === undefined) continue;
       const prior = registered.get(sessionId);
-      if (prior !== undefined && (prior.runId !== assignment.runId || prior.taskId !== assignment.taskId)) {
+      if (prior !== undefined && (prior.assignment.runId !== assignment.runId || prior.assignment.taskId !== assignment.taskId)) {
         conflicting.add(sessionId);
       }
-      registered.set(sessionId, assignment);
+      registered.set(sessionId, { assignment, enabled: prior?.enabled === true || operatorCanTakeover === true });
     }
   }
-  return [...registered.values()].filter(({ sessionId }) => !conflicting.has(sessionId));
+  return [...registered.values()].filter(({ assignment }) => !conflicting.has(assignment.sessionId));
 }
 
 export class OverviewService {
@@ -64,12 +69,14 @@ export class OverviewService {
   }
 
   async #project(): Promise<OverviewProjection> {
-    const { store, runtime, loadGrants, loadActivity, managerPrincipal } = this.#options;
+    const { store, runtime, loadGrants, loadActivity, managerPrincipal, controls } = this.#options;
     const grants = await loadGrants();
-    const registered = assignmentsFor(grants).flatMap((assignment) => {
+    const registered = assignmentsFor(grants).flatMap((binding) => {
+      const { assignment } = binding;
       const session = store.getSession(assignment.sessionId);
       const task = store.getTask(assignment.taskId);
-      return session !== undefined && task !== undefined && session.taskId === task.id ? [{ assignment, session, task }] : [];
+      return session !== undefined && task !== undefined && session.taskId === task.id
+        ? [{ binding, assignment, session, task }] : [];
     }).slice(0, paneLimit);
     const activeRuns = new Set(registered.map(({ assignment }) => assignment.runId));
     for (const runId of this.#cursors.keys()) {
@@ -94,7 +101,7 @@ export class OverviewService {
       }
     }
 
-    const panes = await Promise.all(registered.map(async ({ assignment, session, task }): Promise<OverviewPane> => {
+    const panes = await Promise.all(registered.map(async ({ binding, assignment, session, task }): Promise<OverviewPane> => {
       const links = store.eventsFor(task.id).flatMap(({ details }) => details?.type === "issue_link" ? [details.issue] : []);
       const issue = links.at(-1);
       const ticket = issue === undefined ? task.id : `${issue.repository}#${issue.number}`;
@@ -111,7 +118,10 @@ export class OverviewService {
         const reason = error instanceof HermesRuntimeError ? error.message : "The native session is unavailable.";
         observed = { availability: "unavailable", reason };
       }
-      return { task, session, ticket, runtime: observed, highlighted: session.id === highlighted };
+      return {
+        task, session, ticket, runtime: observed, highlighted: session.id === highlighted,
+        control: controls.view(binding, observed.availability === "available" && observed.snapshot.status === "running"),
+      };
     }));
     return { panes, association };
   }
@@ -142,20 +152,36 @@ export async function overviewRoutesFromEnv(loadActivity?: () => Promise<Approva
   const guard = localOperatorGuard(digest);
   const store = new OperationalStore(database);
   const runtime = new HermesRuntime({ origin, apiKey: key });
-  const view = new OverviewService({ store, runtime, loadGrants, loadActivity, managerPrincipal });
+  const controls = new SessionControlService({
+    store, runtime,
+    loadBinding: async (id) => {
+      const binding = assignmentsFor(await loadGrants()).find(({ assignment }) => assignment.sessionId === id);
+      if (binding !== undefined && store.getSession(id)?.taskId === binding.assignment.taskId) return binding;
+    },
+  });
+  const view = new OverviewService({ store, runtime, loadGrants, loadActivity, managerPrincipal, controls });
 
   async function serve(request: IncomingMessage, response: ServerResponse): Promise<boolean> {
-    if (request.url !== "/api/overview") return false;
+    const controlRoute = request.url === "/api/overview/control";
+    if (!controlRoute && request.url !== "/api/overview") return false;
+    const method = controlRoute ? "POST" : "GET";
     const denied = guard(request);
     if (denied !== undefined) send(response, denied.status, { error: denied.error });
-    else if (request.method !== "GET") {
-      response.setHeader("Allow", "GET");
-      send(response, 405, { error: "Overview supports read requests." });
+    else if (request.method !== method) {
+      response.setHeader("Allow", method);
+      send(response, 405, { error: "This Overview route does not support that method." });
     } else {
       try {
-        send(response, 200, await view.list());
-      } catch {
-        send(response, 503, { error: "The local Overview source is unavailable." });
+        const result = controlRoute ? await controls.operate(await readOperatorJson(request)) : await view.list();
+        send(response, 200, result);
+      } catch (error) {
+        if (error instanceof SessionControlError || error instanceof ApprovalError) {
+          send(response, error instanceof SessionControlError ? error.status : 400, { error: error.message });
+        } else if (controlRoute && error instanceof HermesRuntimeError) {
+          send(response, 503, { error: error.message });
+        } else {
+          send(response, 503, { error: "The local Overview source is unavailable." });
+        }
       }
     }
     return true;

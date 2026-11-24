@@ -14,4 +14,6 @@ An approval binds to one canonical action, exact target session, corresponding n
 
 SQLite records one decision or execution claim per action across host processes. Denial leaves the native run untouched. A retry of an existing decision cannot issue another stop. A durable execution claim without a verified native receipt remains **Execution unverified** after restart. When Hermes acknowledges stopping, the card states that it has requested a stop and is awaiting a settled native outcome.
 
+Approved native session changes must acquire the same durable per-session control fence as [manual takeover](overview.md#manual-session-control). A request held during takeover remains eligible for a new approval attempt after handback, subject to the original binding and expiry. A human denial remains available while the session is under manual control.
+
 Run `npm test` for the scope, expiry, replay and recovery cases. Set `PRAXIS_HERMES_BIN` and run `npm run test:approval:live` after building to verify the Activity panel with two real Hermes runs and an isolated provider. The verified combination uses Hermes Agent v0.23.3 at `caafe5389ae585ef77387a962aee05b1bcf17029`, Python 3.14.10, Node.js 24.22.3 and Chromium 156.0.8078.79 on Linux x64.

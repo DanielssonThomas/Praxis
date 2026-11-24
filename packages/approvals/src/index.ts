@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   approvalIdSchema,
   approvalSchema,
@@ -8,6 +8,7 @@ import {
   runtimeSessionSnapshotSchema,
 } from "@praxis/contracts";
 import type { Action, ActionLifecycle, Approval, Event, EventId, RuntimeSessionSnapshot } from "@praxis/contracts";
+import { HermesRuntimeError } from "@praxis/hermes-runtime";
 import type { HermesAssignment, HermesRuntime } from "@praxis/hermes-runtime";
 import { mcpGrantsSchema } from "@praxis/mcp";
 import type { McpGrant } from "@praxis/mcp";
@@ -35,7 +36,8 @@ export type ApprovalActivity = ActionRequest & (
   | { state: "expired" | "invalidated" | "refused" | "uncertain"; reason: string }
 );
 
-type ApprovalErrorCode = "invalid_input" | "not_found" | "invalid_approval" | "already_decided" | "expired" | "invalidated";
+type ApprovalErrorCode = "invalid_input" | "not_found" | "invalid_approval" | "already_decided" | "expired"
+  | "invalidated" | "control_busy";
 export class ApprovalError extends Error {
   constructor(readonly code: ApprovalErrorCode, message: string) {
     super(message);
@@ -213,9 +215,22 @@ export class ApprovalService {
     return binding;
   }
 
-  #claim(request: ActionRequest, value: Decision): void {
+  #claim(request: ActionRequest, value: Decision, revision?: string): void {
     try {
-      if (this.#writeStage(request, { stage: "decision", value }) === "inserted") return;
+      const transition: ActionLifecycle = { stage: "decision", value };
+      if (revision === undefined) {
+        if (this.#writeStage(request, transition) === "inserted") return;
+      } else {
+        const { id: sessionId } = request.action.target;
+        if (this.#store.compareSessionControl(sessionId, undefined, {
+          mode: "automated_write", revision, actionId: request.action.id,
+        }, this.#stageEvent(request, transition))) return;
+        const owner = this.#store.sessionControl(sessionId);
+        if ((owner?.mode !== "automated_write" || owner.actionId !== request.action.id)
+          && this.#readStage(request, "decision") === undefined) {
+          throw new ApprovalError("control_busy", "Session control holds this action. Wait for control to return before approving it.");
+        }
+      }
     } catch (error) {
       if (!isConflict(error)) throw error;
     }
@@ -236,8 +251,11 @@ export class ApprovalService {
     const approved = request.action.kind === "session.stop" && review.mode === "approval" && decision.kind === "approve"
       && review.approval.actionId === request.action.id && review.approval.id === decision.approvalId;
     if (!routine && !approved) throw new ApprovalError("invalid_approval", "The decision does not authorize this exact action.");
-    this.#claim(request, decision);
+    const { id: sessionId } = request.action.target;
+    const revision = approved ? randomUUID() : undefined;
+    this.#claim(request, decision, revision);
     this.#inFlight.add(request.action.id);
+    let mayHaveDispatched = false;
     try {
       let result: Settlement;
       try {
@@ -246,17 +264,25 @@ export class ApprovalService {
           ? await this.#runtime.inspectAssignment(binding.assignment)
           : await this.#runtime.stopAssignment(binding.assignment, async () => {
             this.#requireBinding(request, review, await this.#grants());
+            mayHaveDispatched = true;
           }));
         if (native.taskId !== binding.assignment.taskId || native.sessionId !== binding.assignment.sessionId) {
           throw new Error("The native receipt identified another assignment");
         }
         result = { outcome: "resolved", native };
       } catch (error) {
-        result = error instanceof ApprovalError
+        const refused = error instanceof HermesRuntimeError
+          && ["native_refused", "unauthorized", "not_found", "unsupported"].includes(error.code);
+        result = error instanceof ApprovalError || refused
           ? { outcome: "invalidated", reason: error.message }
           : { outcome: "uncertain", reason: "The native execution outcome could not be verified. The claim cannot be retried." };
       }
-      this.#writeStage(request, { stage: "settlement", value: result });
+      const settlement: ActionLifecycle = { stage: "settlement", value: result };
+      if (revision === undefined || (mayHaveDispatched && result.outcome === "uncertain")) {
+        this.#writeStage(request, settlement);
+      } else if (!this.#store.compareSessionControl(sessionId, revision, undefined, this.#stageEvent(request, settlement))) {
+        throw new Error("The scoped execution lost its durable session control.");
+      }
     } finally {
       this.#inFlight.delete(request.action.id);
     }
@@ -306,13 +332,17 @@ export class ApprovalService {
   }
 
   #writeStage(request: ActionRequest, transition: ActionLifecycle) {
-    return this.#store.appendEvent(eventSchema.parse({
+    return this.#store.appendEvent(this.#stageEvent(request, transition));
+  }
+
+  #stageEvent(request: ActionRequest, transition: ActionLifecycle): Event {
+    return eventSchema.parse({
       schemaVersion: contractVersion,
       id: stageId(request.action, transition.stage),
       occurredAt: new Date(this.#now()).toISOString(),
       kind: `action.${transition.stage}`,
       subject: { kind: "action", id: request.action.id },
       details: { type: "action_lifecycle", requestId: request.requestId, actionId: request.action.id, transition },
-    }));
+    });
   }
 }

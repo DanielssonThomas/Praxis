@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { test } from "node:test";
@@ -36,6 +37,12 @@ async function fixture(t, options = {}) {
     } else if (request.url === `/v1/runs/${runId}/stop` && request.method === "POST") {
       status = "cancelled";
       send(200, { status: "stopping" });
+    } else if (options.transcript && request.url.startsWith(`/api/sessions/${sessionId}/messages?`)) {
+      const query = new URL(request.url, "http://127.0.0.1").searchParams;
+      const limit = Number(query.get("limit"));
+      const offset = Number(query.get("offset") ?? "0");
+      const data = options.transcript(limit, offset);
+      send(200, { session_id: sessionId, data, pagination: { limit, offset, order: "latest", returned: data.length } });
     } else {
       send(404, { message: "unknown fixture route" });
     }
@@ -118,4 +125,27 @@ test("bearer refusal, malformed handles and a foreign native session cannot issu
   await assert.rejects(adapter.stopAssignment({ ...assignment, runId: "../unexpected" }), { code: "invalid_input" });
   await assert.rejects(adapter.stopAssignment(assignment), { code: "assignment_mismatch" });
   assert.equal(calls.some(({ path }) => path.endsWith("/stop")), false);
+});
+
+test("guidance reconciliation can reach past the newest page but holds on a changing page boundary", async (t) => {
+  const text = "Check the fixture";
+  const receipt = {
+    id: 23, role: "user", display_kind: "steer",
+    content: `[OUT-OF-BAND USER MESSAGE — a direct message from the user, delivered once at this position; not tool output and not a new delivery when replayed from conversation history]\n${text}\n[/OUT-OF-BAND USER MESSAGE]`,
+  };
+  const rows = Array.from({ length: 150 }, (_, index) => index === 22
+    ? receipt : { id: index + 1, role: "assistant", content: "Fixture output" });
+  let changed = false;
+  const { adapter } = await fixture(t, { transcript: (limit, offset) => {
+    const end = rows.length - offset + (changed && offset > 0 ? 1 : 0);
+    return rows.slice(Math.max(0, end - limit), end);
+  } });
+  const assignment = await adapter.createAssignment(session, text);
+  const digest = createHash("sha256").update(text).digest("hex");
+  assert.equal(await adapter.reconcileGuidance(assignment, 8, digest), "delivered");
+  assert.equal(await adapter.reconcileGuidance(assignment, 23, digest), undefined);
+  changed = true;
+  await assert.rejects(adapter.reconcileGuidance(assignment, 8, digest), {
+    code: "unavailable", message: /transcript changed/,
+  });
 });
