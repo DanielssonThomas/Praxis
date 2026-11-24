@@ -4,8 +4,10 @@
     "noEmit": true,
     "paths": {
       "@praxis/contracts": ["./packages/contracts/src/index.ts"],
+      "@praxis/hermes-runtime": ["./packages/hermes-runtime/src/index.ts"],
       "@praxis/settings": ["./packages/settings/src/index.ts"],
-      "@praxis/settings/http": ["./packages/settings/src/http.ts"]
+      "@praxis/settings/http": ["./packages/settings/src/http.ts"],
+      "@praxis/state": ["./packages/state/src/index.ts"]
     }
   },
   "include": ["packages/*/src/**/*.ts"]
