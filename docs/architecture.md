@@ -18,7 +18,7 @@ The contracts cover Praxis operational records. Axiom owns task briefs, effectiv
 | Native execution and identifiers | Hermes and its Praxis adapter |
 | Local persistence, references and event replay | [Local state store](operational-state.md) |
 | Agent coordination and scoped request intake | [Praxis MCP](mcp.md) |
-| Approval semantics and execution authorization | Approval and execution services |
+| Approval semantics and execution authorization | [Approval and execution services](approvals.md) |
 | Measured usage and reporting policy | Native adapters and reporting service |
 
 See the [Hermes feasibility review](hermes-feasibility.md) for the native surfaces under consideration and their verification requirements.

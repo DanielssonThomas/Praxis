@@ -166,3 +166,22 @@ export async function startHermesFixture(t, respond, configLines = []) {
   }
   return { origin, apiKey, runtime, directory };
 }
+
+export async function startShell(directory, environment = {}) {
+  const processHandle = spawn(process.execPath, ["packages/shell/dist/cli.js"], {
+    env: { ...process.env, PRAXIS_PORT: "0", PRAXIS_CONFIG_FILE: join(directory, "settings.json"), ...environment },
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  try {
+    const log = await Promise.race([
+      once(processHandle.stdout, "data").then(([chunk]) => chunk.toString()),
+      once(processHandle, "exit").then(() => { throw new Error("Praxis stopped before listening"); }),
+    ]);
+    const origin = /http:\/\/127\.0\.0\.1:\d+\//.exec(log)?.[0];
+    assert.ok(origin);
+    return { processHandle, origin };
+  } catch (error) {
+    await stopProcess(processHandle);
+    throw error;
+  }
+}

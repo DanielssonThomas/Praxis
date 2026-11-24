@@ -63,6 +63,11 @@ function initialize(database: DatabaseSync): void {
     } else if (version !== 1) {
       throw new OperationalStoreError("unsupported_version", `Unsupported operational database version ${version}`);
     }
+    database.exec(`
+      CREATE INDEX IF NOT EXISTS operational_events_by_kind
+        ON operational_records(json_extract(payload, '$.kind'), sequence)
+        WHERE subject_id IS NOT NULL
+    `);
     database.exec("COMMIT");
   } catch (error) {
     database.exec("ROLLBACK");
@@ -127,6 +132,14 @@ export class OperationalStore {
       .prepare("SELECT payload FROM operational_records WHERE subject_id = ? ORDER BY sequence")
       .all(subjectId)
       .map((row) => eventSchema.parse(JSON.parse(String(row.payload)))));
+  }
+
+  eventsOfKind(kind: string): Event[] {
+    return storage("read", () => this.#database.prepare(`
+      SELECT payload FROM operational_records
+      WHERE subject_id IS NOT NULL AND json_extract(payload, '$.kind') = ?
+      ORDER BY sequence
+    `).all(kind).map((row) => eventSchema.parse(JSON.parse(String(row.payload)))));
   }
 
   #read<T>(id: string, schema: ZodType<T>): T | undefined {

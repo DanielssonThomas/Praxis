@@ -1,16 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { HermesRuntime } from "@praxis/hermes-runtime";
 import { OperationalStore } from "@praxis/state";
-import { z } from "zod";
-import { createPraxisMcpServer, mcpGrantsSchema } from "./index.js";
+import { createPraxisMcpServer, mcpAuthoritySchema } from "./index.js";
 
 const authorityFile = process.env.PRAXIS_MCP_CONFIG_FILE;
 if (!authorityFile) throw new Error("Set PRAXIS_MCP_CONFIG_FILE to the user-owned MCP authority file.");
-const config = z.strictObject({
-  schemaVersion: z.literal(1),
-  database: z.string().min(1),
-  grants: mcpGrantsSchema,
-}).parse(JSON.parse(await readFile(authorityFile, "utf8")));
+const config = mcpAuthoritySchema.parse(JSON.parse(await readFile(authorityFile, "utf8")));
 
 const port = Number(process.env.PRAXIS_MCP_PORT ?? 3211);
 if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error("Set PRAXIS_MCP_PORT to an integer from 0 to 65535.");

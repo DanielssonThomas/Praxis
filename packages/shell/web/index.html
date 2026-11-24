@@ -6,12 +6,16 @@
   <title>Praxis</title>
   <link rel="stylesheet" href="/assets/shell.css">
   <script type="module" src="/assets/shell.js"></script>
+  <script type="module" src="/assets/activity.js"></script>
 </head>
-<body>
+<body data-activity="unavailable">
   <header id="shell-header">
     <div class="header-row">
       <span class="brand">Praxis</span>
-      <button id="menu-toggle" type="button" aria-controls="main-nav" aria-expanded="false">Menu</button>
+      <div class="header-actions">
+        <button id="activity-toggle" type="button" aria-controls="activity-panel" aria-expanded="false" hidden>Activity</button>
+        <button id="menu-toggle" type="button" aria-controls="main-nav" aria-expanded="false">Menu</button>
+      </div>
     </div>
     <nav id="main-nav" aria-label="Main navigation" hidden>
       <a href="#manager" data-route="manager">Manager</a>
@@ -29,6 +33,18 @@
     <section class="view settings-view" data-view="settings" aria-label="Settings" hidden>
       <iframe id="settings-frame" title="Praxis settings"></iframe>
     </section>
+    <aside id="activity-panel" aria-labelledby="activity-title" hidden>
+      <div class="activity-heading">
+        <h2 id="activity-title">Activity</h2>
+        <button type="button" id="activity-lock" hidden>Lock</button>
+      </div>
+      <form id="activity-auth" aria-label="Unlock activity" autocomplete="off">
+        <label>Operator token <input type="password" name="operatorToken" required></label>
+        <button type="submit">Unlock activity</button>
+      </form>
+      <p id="activity-message" role="status" hidden></p>
+      <div id="activity-list"></div>
+    </aside>
   </main>
   <footer id="command-bar">
     <form id="command-form" aria-label="Command bar" autocomplete="off">

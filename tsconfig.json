@@ -3,8 +3,11 @@
   "compilerOptions": {
     "noEmit": true,
     "paths": {
+      "@praxis/approvals": ["./packages/approvals/src/index.ts"],
+      "@praxis/approvals/http": ["./packages/approvals/src/http.ts"],
       "@praxis/contracts": ["./packages/contracts/src/index.ts"],
       "@praxis/hermes-runtime": ["./packages/hermes-runtime/src/index.ts"],
+      "@praxis/mcp": ["./packages/mcp/src/index.ts"],
       "@praxis/settings": ["./packages/settings/src/index.ts"],
       "@praxis/settings/http": ["./packages/settings/src/http.ts"],
       "@praxis/state": ["./packages/state/src/index.ts"]

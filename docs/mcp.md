@@ -35,7 +35,7 @@ For native inspection, set `PRAXIS_HERMES_ORIGIN` and `PRAXIS_HERMES_API_KEY` in
 | `inspect_task` | Read a canonical task in the principal's task scope. |
 | `inspect_worker` | Read a scoped worker session and its native runtime snapshot when available. |
 | `report_worker` | Record a progress, result or blocked event for a session with `canReport`. |
-| `request_action` | Persist a pending action request for a granted kind and target. Execution is owned by the approval lifecycle in [#11](https://github.com/DanielssonThomas/Praxis/issues/11). |
+| `request_action` | Persist a pending action request for a granted kind and target. The [approval service](approvals.md) owns execution. |
 
 Each write carries a caller-generated `submissionId` using the event ID format. Retry with the same identifier, timestamp and data to reuse the original record. The server derives the durable identity from the authenticated principal. Reusing the identifier with different content produces a conflict. The caller supplies `occurredAt` as reported event time. Approval enforcement and expiry require their own server-owned time.
 

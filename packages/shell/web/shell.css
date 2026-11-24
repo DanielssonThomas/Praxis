@@ -31,12 +31,13 @@ header { background: var(--panel); border-block-end: 1px solid var(--border); }
   padding-inline: clamp(0.75rem, 4vw, 2.25rem);
 }
 .header-row { min-block-size: 3.5rem; justify-content: space-between; }
+.header-actions { display: flex; gap: 0.5rem; }
 .brand { font-weight: 700; letter-spacing: -0.025em; }
 nav { flex-wrap: wrap; padding-block-end: 0.65rem; }
 nav a { color: var(--text); text-decoration: none; border-radius: 0.35rem; padding: 0.35rem 0.65rem; }
 nav a:hover, nav a[aria-current="page"] { color: var(--accent); background: var(--accent-soft); }
 
-main { min-inline-size: 0; overflow: hidden; }
+main { min-inline-size: 0; overflow: hidden; position: relative; }
 .view { box-sizing: border-box; block-size: 100%; overflow: auto; padding: clamp(1rem, 5vw, 3rem); }
 .settings-view { padding: 0; }
 iframe { display: block; inline-size: 100%; block-size: 100%; border: 0; }
@@ -53,3 +54,32 @@ button { color: var(--text); background: var(--panel); padding: 0.35rem 0.75rem;
 button:hover { background: var(--accent-soft); }
 button[type="submit"] { background: var(--accent); color: var(--button-text); border-color: var(--accent); font-weight: 650; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+#activity-panel {
+  position: absolute;
+  inset-block: clamp(0.6rem, 3vw, 1.5rem) auto;
+  inset-inline-end: clamp(0.6rem, 3vw, 1.5rem);
+  box-sizing: border-box;
+  inline-size: min(25rem, calc(100% - 1.2rem));
+  max-block-size: calc(100% - 3rem);
+  overflow: auto;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: var(--panel);
+  box-shadow: 0 0.6rem 2rem #16254124;
+}
+.activity-heading, .activity-actions { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
+.activity-heading { align-items: center; margin-block-end: 0.55rem; }
+#activity-panel h2, #activity-panel h3, #activity-panel p { margin: 0; }
+#activity-panel h2 { font-size: 1.15rem; }
+#activity-panel h3 { font-size: 1rem; }
+#activity-auth, #activity-list { display: grid; gap: 0.55rem; }
+#activity-auth label { display: grid; gap: 0.25rem; }
+#activity-auth button, .activity-actions button { justify-self: start; }
+#activity-panel #activity-message { color: var(--muted); margin-block: 0.55rem; }
+.activity-card { padding: 0.7rem; border: 1px solid var(--border); border-radius: 0.45rem; overflow-wrap: anywhere; }
+.activity-card[data-state="attention"] { border-color: var(--accent); }
+.activity-card .activity-state { color: var(--muted); font-size: 0.9rem; }
+.activity-card .activity-action-text { margin-block: 0.35rem; font-size: 0.9rem; }
+.activity-actions { justify-content: flex-start; flex-wrap: wrap; margin-block-start: 0.55rem; }
