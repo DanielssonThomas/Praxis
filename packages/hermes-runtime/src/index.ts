@@ -107,20 +107,16 @@ function parse<T>(schema: z.ZodType<T>, value: unknown, code: "invalid_input" | 
   throw new HermesRuntimeError(code, message);
 }
 
-function urlForOrigin(value: string): URL {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new HermesRuntimeError("invalid_input", "Set Hermes to an explicit loopback HTTP origin.");
+function loopbackBaseUrl(value: string): string {
+  // Check the input before URL parsing can normalize escaped paths or dot segments.
+  const match = /^https?:\/\/(?:[a-z0-9.]+|\[[0-9a-f:.]+\])(?::[0-9]+)?(\/[^\\?#\s]*)?$/i.exec(value);
+  const path = match?.[1] ?? "/";
+  const url = match?.[0] === value ? URL.parse(value) : null;
+  if (!url || !["127.0.0.1", "[::1]"].includes(url.hostname)
+    || (path !== "/" && !/^\/p\/[a-z0-9][a-z0-9_-]{0,63}\/?$/.test(path))) {
+    throw new HermesRuntimeError("invalid_input", "Set Hermes to an explicit loopback HTTP(S) URL with an optional /p/<profile> path.");
   }
-  if (!["http:", "https:"].includes(url.protocol)
-    || !["127.0.0.1", "[::1]"].includes(url.hostname)
-    || url.pathname !== "/"
-    || url.username || url.password || url.search || url.hash) {
-    throw new HermesRuntimeError("invalid_input", "Set Hermes to an explicit loopback HTTP origin without embedded credentials.");
-  }
-  return url;
+  return url.origin + path.replace(/\/$/, "");
 }
 
 function nativeSessionFor(taskId: string, sessionId: string): string {
@@ -170,11 +166,11 @@ function normalizeUsage(value: unknown, assignment: HermesAssignment): Usage {
 }
 
 export class HermesRuntime {
-  readonly #origin: URL;
+  readonly #baseUrl: string;
   readonly #apiKey: string;
 
   constructor(options: { origin: string; apiKey: string }) {
-    this.#origin = urlForOrigin(options.origin);
+    this.#baseUrl = loopbackBaseUrl(options.origin);
     if (typeof options.apiKey !== "string" || !/^[!-~]+$/.test(options.apiKey)) {
       throw new HermesRuntimeError("invalid_input", "Supply a Hermes bearer credential outside the Praxis settings file.");
     }
@@ -440,7 +436,7 @@ export class HermesRuntime {
 
     let response: Response;
     try {
-      response = await fetch(new URL(path, this.#origin), {
+      response = await fetch(this.#baseUrl + path, {
         ...options,
         headers,
         redirect: "error",
