@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Praxis settings</title>
+  <link rel="stylesheet" href="/assets/settings.css">
+  <script type="module" src="/assets/settings.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Praxis settings</h1>
+      <p>Manage the preferences stored on this device.</p>
+    </header>
+    <form id="settings">
+      <fieldset id="fields" disabled aria-label="Praxis preferences">
+        <section aria-labelledby="policy-title">
+          <h2 id="policy-title">Policy and memory</h2>
+          <label class="toggle"><input type="checkbox" name="axiomEnabled"> Apply Axiom policy</label>
+          <label>Policy profiles <input name="profiles" placeholder="engineering, design"></label>
+          <label class="toggle"><input type="checkbox" name="memoryEnabled"> Enable engineering memory</label>
+        </section>
+        <section aria-labelledby="runtime-title">
+          <h2 id="runtime-title">Manager and worker</h2>
+          <div class="grid">
+            <label>Hermes manager profile <input name="managerProfile" required maxlength="80"></label>
+            <label>Manager model <input name="managerModel" placeholder="Use Hermes default" maxlength="120"></label>
+            <label>Worker runtime
+              <select id="worker-runtime" name="workerRuntime">
+                <option value="codex">Codex</option>
+                <option value="claude">Claude Code</option>
+                <option value="hermes">Hermes</option>
+              </select>
+            </label>
+            <label>Worker model <input name="workerModel" placeholder="Use runtime default" maxlength="120"></label>
+          </div>
+        </section>
+        <section aria-labelledby="budget-title">
+          <h2 id="budget-title">Task budgets</h2>
+          <div class="grid">
+            <label>Maximum tokens <input type="number" name="maxTaskTokens" min="1" step="1" placeholder="Unset"></label>
+            <label>Maximum cost in USD <input type="number" name="maxTaskUsd" min="0" step="any" placeholder="Unset"></label>
+          </div>
+        </section>
+        <section aria-labelledby="display-title">
+          <h2 id="display-title">Display</h2>
+          <label class="toggle"><input type="checkbox" name="autoPresent"> Show relevant cards automatically</label>
+        </section>
+        <button type="submit">Save settings</button>
+      </fieldset>
+      <output id="status" role="status" aria-live="polite">Loading settings…</output>
+    </form>
+  </main>
+</body>
+</html>

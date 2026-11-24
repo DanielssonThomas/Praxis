@@ -8,9 +8,10 @@
     "npm": "11.x"
   },
   "scripts": {
+    "start": "node packages/settings/dist/cli.js",
     "test": "npm run build && node --test",
     "typecheck": "tsc --project tsconfig.json",
-    "build": "tsc --project packages/contracts/tsconfig.json && tsc --project packages/state/tsconfig.json"
+    "build": "tsc --project packages/contracts/tsconfig.json && tsc --project packages/state/tsconfig.json && tsc --project packages/settings/tsconfig.json"
   },
   "devDependencies": {
     "typescript": "5.9.3"
