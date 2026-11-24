@@ -49,11 +49,15 @@ const stopSchema = z.object({ run_id: runId.optional(), status: z.string() });
 const promptSchema = z.string().refine((text) => text.trim().length > 0);
 export const manualGuidanceSchema = z.string().trim().min(1).max(1_000);
 const steerSchema = z.object({ run_id: runId, accepted: z.literal(true) });
+const transcriptPageSize = 100;
 const transcriptSchema = z.object({
   session_id: z.string(),
+  pagination: z.object({
+    limit: z.int().positive(), offset: z.int().nonnegative(), order: z.literal("latest"), returned: z.int().nonnegative(),
+  }),
   data: z.array(z.object({
     id: z.int().positive(), role: z.string(), content: z.unknown(), display_kind: z.string().nullish(),
-  })).max(100),
+  })).max(transcriptPageSize),
 });
 const steerOpen = "[OUT-OF-BAND USER MESSAGE — a direct message from the user, delivered once at this position; not tool output and not a new delivery when replayed from conversation history]\n";
 const steerClose = "\n[/OUT-OF-BAND USER MESSAGE]";
@@ -276,7 +280,7 @@ export class HermesRuntime {
     if (!await this.guidanceReady(assignment)) {
       throw new HermesRuntimeError("unsupported", "Hermes is not accepting guidance for this run.");
     }
-    return (await this.#readTranscript(assignment)).reduce((latest, row) => Math.max(latest, row.id), 0);
+    return (await this.#readTranscript(assignment, 1)).at(-1)?.id ?? 0;
   }
 
   async steerAssignment(value: unknown, textValue: unknown, authorize: () => Promise<void>): Promise<void> {
@@ -299,23 +303,40 @@ export class HermesRuntime {
     const assignment = parse(hermesAssignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
     const { snapshot } = await this.#readRun(assignment);
     const terminal = ["completed", "failed", "stopped", "interrupted"].includes(snapshot.status);
-    for (const row of await this.#readTranscript(assignment)) {
-      if (row.id <= after || row.role !== "user" || typeof row.content !== "string") continue;
-      const delivered = row.display_kind === "steer" && row.content.startsWith(steerOpen) && row.content.endsWith(steerClose);
-      if (!delivered && !terminal) continue;
-      const text = delivered ? row.content.slice(steerOpen.length, -steerClose.length) : row.content;
-      if (createHash("sha256").update(text).digest("hex") === textDigest) return delivered ? "delivered" : "recorded";
+    const deadline = AbortSignal.timeout(20_000);
+    let boundary: string | undefined;
+    for (let offset = 0; ; offset += transcriptPageSize - 1) {
+      const rows = await this.#readTranscript(assignment, transcriptPageSize, offset, deadline);
+      if (boundary !== undefined && JSON.stringify(rows.at(-1)) !== boundary) {
+        throw new HermesRuntimeError("unavailable", "The Hermes transcript changed during verification. Try again.");
+      }
+      for (const row of rows) {
+        if (row.id <= after || row.role !== "user" || typeof row.content !== "string") continue;
+        const delivered = row.display_kind === "steer" && row.content.startsWith(steerOpen) && row.content.endsWith(steerClose);
+        if (!delivered && !terminal) continue;
+        const text = delivered ? row.content.slice(steerOpen.length, -steerClose.length) : row.content;
+        if (createHash("sha256").update(text).digest("hex") === textDigest) return delivered ? "delivered" : "recorded";
+      }
+      if (rows.length < transcriptPageSize || rows[0].id <= after) return;
+      boundary = JSON.stringify(rows[0]);
     }
   }
 
-  async #readTranscript(assignment: HermesAssignment) {
+  async #readTranscript(assignment: HermesAssignment, limit: number, offset = 0, signal?: AbortSignal) {
     const session = nativeSessionFor(assignment.taskId, assignment.sessionId);
-    const response = await this.#request(`/api/sessions/${session}/messages?limit=100&order=latest&include_compacted=true`);
+    const response = await this.#request(
+      `/api/sessions/${session}/messages?limit=${limit}&offset=${offset}&order=latest&include_compacted=true`, { signal },
+    );
     const transcript = parse(transcriptSchema, response, "invalid_response", "Hermes did not return a usable transcript.");
     if (transcript.session_id !== session) {
       throw new HermesRuntimeError("assignment_mismatch", "The Hermes transcript does not match the exact Praxis session.");
     }
-    return transcript.data;
+    const { pagination, data } = transcript;
+    if (pagination.limit !== limit || pagination.offset !== offset || pagination.returned !== data.length
+      || data.length > limit || data.some(({ id }, index) => index > 0 && id <= data[index - 1].id)) {
+      throw new HermesRuntimeError("invalid_response", "Hermes did not return a usable transcript page.");
+    }
+    return data;
   }
 
   async #readRun(assignment: HermesAssignment): Promise<RunInspection> {
