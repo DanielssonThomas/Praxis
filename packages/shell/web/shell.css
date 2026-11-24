@@ -145,3 +145,47 @@ button[type="submit"] { background: var(--accent); color: var(--button-text); bo
   .overview-view:not([hidden]) { animation: none; }
   .session-pane { transition: none; }
 }
+
+.reports-heading, .reports-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+}
+#reports-auth {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: .75rem;
+}
+#reports-auth label, #reports-local-preferences label { display: grid; gap: .25rem; }
+#reports-note { margin: .75rem 0; }
+#reports-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+  gap: .75rem;
+}
+.report-metric {
+  min-width: 0;
+  border: 1px solid #cfdbd7;
+  border-radius: .45rem;
+  background: #fff;
+  color: #142a27;
+  padding: .75rem;
+}
+.report-metric h2 { font-size: 1rem; margin: 0; }
+.report-metric p { font-size: .875rem; margin: .3rem 0; }
+.report-canvas { position: relative; height: 10rem; }
+#reports-preferences { margin-block: 1rem; }
+#reports-options { display: grid; gap: .65rem; margin-block: .75rem; justify-items: start; }
+#reports-options fieldset {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: .5rem 1rem;
+  border: 1px solid #cfdbd7;
+  border-radius: .4rem;
+}
+#reports-local-preferences label:has(input) { display: flex; align-items: center; gap: .25rem; }

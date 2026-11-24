@@ -116,7 +116,7 @@ export type ActionLifecycle = z.infer<typeof actionLifecycleSchema>;
 
 export const workerReportPhaseSchema = z.enum(["progress", "result", "blocked"]);
 export const workerReportMessageSchema = nonblankText.max(8_192);
-export const githubIssueReferenceSchema = z.strictObject({
+const githubWorkReference = z.strictObject({
   provider: z.literal("github"),
   repository: z.string()
     .regex(/^[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9._-]{1,100}$/i)
@@ -124,8 +124,12 @@ export const githubIssueReferenceSchema = z.strictObject({
     .refine((value) => !value.endsWith("/.") && !value.endsWith("/..")),
   number: z.int().positive(),
 });
+export const githubIssueReferenceSchema = githubWorkReference;
 export type GitHubIssueReference = z.infer<typeof githubIssueReferenceSchema>;
 
+export const providerDeliveryEventKindSchema = z.enum([
+  "provider.pr_opened", "provider.pr_merged", "provider.ticket_completed",
+]);
 const workerReportKind = z.templateLiteral(["worker.", workerReportPhaseSchema]);
 const eventDetailsSchema = z.discriminatedUnion("type", [
   z.strictObject({
@@ -145,6 +149,7 @@ const eventDetailsSchema = z.discriminatedUnion("type", [
     transition: actionLifecycleSchema,
   }),
   z.strictObject({ type: z.literal("issue_link"), issue: githubIssueReferenceSchema }),
+  z.strictObject({ type: z.literal("provider_delivery"), reference: githubWorkReference }),
 ]);
 
 export const eventSchema = z.strictObject({
@@ -174,6 +179,10 @@ export const eventSchema = z.strictObject({
   }
   if (details?.type === "issue_link" && (kind !== "task.issue_linked" || subject.kind !== "task")) {
     context.addIssue({ code: "custom", path: ["details"], message: "An issue link requires the task subject it links to" });
+  }
+  if (details?.type === "provider_delivery"
+    && (subject.kind !== "task" || !providerDeliveryEventKindSchema.safeParse(kind).success)) {
+    context.addIssue({ code: "custom", path: ["details"], message: "Provider delivery details require a delivery event and a task subject" });
   }
 });
 export type Event = z.infer<typeof eventSchema>;

@@ -2,6 +2,7 @@ const routes = {
   manager: { label: "Manager", short: "m" },
   overview: { label: "Overview", short: "o" },
   kanban: { label: "Kanban", short: "k" },
+  reports: { label: "Reports", short: "r" },
   settings: { label: "Settings", short: "s" },
 };
 type Route = keyof typeof routes;

@@ -1,21 +1,34 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { chromium } from "playwright";
+import { OperationalStore } from "@praxis/state";
+import { populateReports } from "../fixtures/reports.mjs";
 
 let browser;
 let host;
 let directory;
 let address;
+let reportDay;
+const token = "reports-browser-operator-fixture-value";
 
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), "praxis-shell-browser-"));
+  const database = join(directory, "operational.sqlite");
+  const store = new OperationalStore(database);
+  reportDay = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  populateReports(store, reportDay);
+  store.close();
   host = spawn(process.execPath, ["packages/shell/dist/cli.js"], {
-    env: { ...process.env, PRAXIS_PORT: "0", PRAXIS_CONFIG_FILE: join(directory, "settings.json") },
+    env: {
+      ...process.env, PRAXIS_PORT: "0", PRAXIS_CONFIG_FILE: join(directory, "settings.json"),
+      PRAXIS_REPORTS_DATABASE: database, PRAXIS_OPERATOR_TOKEN_DIGEST: createHash("sha256").update(token).digest("hex"),
+    },
     stdio: ["ignore", "pipe", "inherit"],
   });
   const log = await Promise.race([
@@ -155,5 +168,92 @@ test("the settings route composes the local editor within the permanent shell", 
   await command(page, "/settings");
   await frame.getByRole("heading", { name: "Praxis settings" }).waitFor();
   assert.equal(await applyAxiom.isChecked(), false);
+  await assertLayout(page);
+});
+
+test("local reports filter the active Chart.js view, preserve preferences and clear only report history", async (t) => {
+  const page = await openPage(t, { width: 1200, height: 900 });
+  const endpoint = new URL("/api/reports", address);
+  assert.equal((await fetch(endpoint)).status, 401);
+  assert.equal((await fetch(new URL("/api/reports/clear", address), {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, Origin: "http://localhost:3129" },
+  })).status, 403);
+  assert.equal((await fetch(new URL("/api/reports/clear", address), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`, Origin: endpoint.origin, "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ confirmed: true }),
+  })).status, 409);
+  await command(page, "/r");
+  await heading(page, "Reports");
+  await page.getByRole("form", { name: "Open Reports" }).getByLabel("Operator token").fill(token);
+  await page.getByRole("button", { name: "Open reports" }).click();
+  const merged = page.getByRole("img", { name: "PRs merged (recorded) by day (UTC)" });
+  await merged.waitFor();
+  const point = await merged.evaluate((canvas, day) => {
+    const chart = window.Chart.getChart(canvas);
+    if (chart.data.labels.length !== 30) throw new Error("Initial chart did not include 30 days");
+    const index = chart.data.labels.indexOf(day);
+    const { x, y } = chart.getDatasetMeta(0).data[index];
+    return { x, y };
+  }, reportDay);
+  await merged.hover({ position: point });
+  await merged.evaluate((canvas, day) => {
+    const chart = window.Chart.getChart(canvas);
+    if (chart.tooltip.title[0] !== day || chart.tooltip.dataPoints[0].parsed.y !== 1) {
+      throw new Error("Chart.js tooltip did not expose the selected day and measured value");
+    }
+  }, reportDay);
+
+  await page.getByLabel("Time range").selectOption("7");
+  await page.waitForFunction(() => window.Chart.getChart(document.querySelector(
+    'canvas[aria-label="PRs merged (recorded) by day (UTC)"]',
+  ))?.data.labels.length === 7);
+  assert.equal(await page.getByRole("button", { name: "Export report JSON" }).isEnabled(), false);
+  await page.getByText("Report preferences", { exact: true }).click();
+  await page.getByRole("checkbox", { name: "PRs merged (recorded)", exact: true }).uncheck();
+  assert.equal(await merged.count(), 0);
+  await page.getByRole("checkbox", { name: "Allow report export" }).check();
+  await page.getByRole("checkbox", { name: "Allow clearing report history" }).check();
+  await page.getByLabel("Report retention").selectOption("7");
+  await page.getByRole("button", { name: "Save report preferences" }).click();
+  await page.locator("#reports-status").getByText("Report preferences saved.").waitFor();
+  assert.equal(await page.locator('#reports-range option[value="30"]').isDisabled(), true);
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export report JSON" }).click();
+  const download = await downloading;
+  const exported = JSON.parse(await readFile(await download.path(), "utf8"));
+  assert.equal(exported.days, 7);
+  assert.equal(exported.buckets.find(({ day }) => day === reportDay).metrics.costUsd, 0);
+  assert.equal(exported.buckets[0].metrics.tokens, null);
+  assert.equal(Object.hasOwn(exported.buckets[0].metrics, "prsMerged"), false);
+
+  await command(page, "/settings");
+  const frame = page.frameLocator('iframe[title="Praxis settings"]');
+  await frame.getByRole("checkbox", { name: "Apply Axiom policy" }).check();
+  await frame.getByRole("button", { name: "Save settings" }).click();
+  await frame.getByRole("status").getByText("Settings saved.").waitFor();
+  await page.reload();
+  await command(page, "/reports");
+  await page.getByRole("form", { name: "Open Reports" }).getByLabel("Operator token").fill(token);
+  await page.getByRole("button", { name: "Open reports" }).click();
+  await page.getByRole("img", { name: "Reported tokens by day (UTC)" }).waitFor();
+  assert.equal(await merged.count(), 0);
+  assert.equal(await page.getByLabel("Time range").inputValue(), "7");
+  await page.getByText("Report preferences", { exact: true }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Clear report history" }).click();
+  await page.locator("#reports-status").getByText("Report history cleared.").waitFor();
+  assert.equal(await page.getByRole("img", { name: "Reported tokens by day (UTC)" }).count(), 0);
+  const audit = new OperationalStore(join(directory, "operational.sqlite"));
+  try {
+    assert.ok(audit.getEvent("event_known_usage"), "clearing reports preserves recorded operational usage events");
+  } finally {
+    audit.close();
+  }
+  await page.getByRole("checkbox", { name: "Show collected metrics in reports" }).uncheck();
+  await page.getByRole("button", { name: "Save report preferences" }).click();
+  await page.getByText("Report collection is paused.", { exact: false }).waitFor();
   await assertLayout(page);
 });

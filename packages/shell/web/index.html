@@ -9,8 +9,9 @@
   <script type="module" src="/assets/activity.js"></script>
   <script type="module" src="/assets/kanban.js"></script>
   <script type="module" src="/assets/overview.js"></script>
+  <script type="module" src="/assets/reports.js"></script>
 </head>
-<body data-activity="unavailable" data-kanban="unavailable" data-overview="unavailable">
+<body data-activity="unavailable" data-kanban="unavailable" data-overview="unavailable" data-reports="unavailable">
   <header id="shell-header">
     <div class="header-row">
       <span class="brand">Praxis</span>
@@ -23,6 +24,7 @@
       <a href="#manager" data-route="manager">Manager</a>
       <a href="#overview" data-route="overview">Overview</a>
       <a href="#kanban" data-route="kanban">Kanban</a>
+      <a href="#reports" data-route="reports">Reports</a>
       <a href="#settings" data-route="settings">Settings</a>
     </nav>
   </header>
@@ -61,6 +63,55 @@
     </section>
     <section class="view settings-view" data-view="settings" aria-label="Settings" hidden>
       <iframe id="settings-frame" title="Praxis settings"></iframe>
+    </section>
+    <section class="view" data-view="reports" aria-labelledby="reports-title" hidden>
+      <div class="reports-heading">
+        <h1 id="reports-title">Reports</h1>
+        <button id="reports-lock" type="button" hidden>Lock reports</button>
+      </div>
+      <form id="reports-auth" aria-label="Open Reports" autocomplete="off" hidden>
+        <label>Operator token <input type="password" name="operatorToken" required></label>
+        <button type="submit">Open reports</button>
+      </form>
+      <p id="reports-status" role="status">Configure the local operational store to open reports.</p>
+      <div id="reports-content" hidden>
+        <div class="reports-toolbar">
+          <label>Time range
+            <select id="reports-range">
+              <option value="7">Last 7 days</option>
+              <option value="30" selected>Last 30 days</option>
+              <option value="90">Last 90 days</option>
+            </select>
+          </label>
+          <button id="reports-export" type="button">Export report JSON</button>
+        </div>
+        <p id="reports-note"></p>
+        <div id="reports-charts"></div>
+        <details id="reports-preferences">
+          <summary>Report preferences</summary>
+          <form id="reports-options">
+            <fieldset id="reports-metrics">
+              <legend>Visible metrics</legend>
+            </fieldset>
+            <fieldset id="reports-local-preferences">
+              <legend>Local data</legend>
+              <label><input type="checkbox" name="collectionEnabled"> Show collected metrics in reports</label>
+              <label>Report retention
+                <select name="retentionDays">
+                  <option value="7">7 days</option>
+                  <option value="30">30 days</option>
+                  <option value="90">90 days</option>
+                </select>
+              </label>
+              <label><input type="checkbox" name="allowExport"> Allow report export</label>
+              <label><input type="checkbox" name="allowClearHistory"> Allow clearing report history</label>
+            </fieldset>
+            <button type="submit">Save report preferences</button>
+          </form>
+          <p>Clearing report history hides existing measurements from reports and keeps the operational audit records.</p>
+          <button type="button" id="reports-clear">Clear report history</button>
+        </details>
+      </div>
     </section>
     <aside id="activity-panel" aria-labelledby="activity-title" hidden>
       <div class="activity-heading">

@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
-import { readSettings, saveSettings, SettingsError } from "./index.js";
+import { parseSettings, readSettings, SettingsError, updateSettings } from "./index.js";
 
 const assets = new Map([
   ["/settings", { url: new URL("../web/settings.html", import.meta.url), type: "text/html; charset=utf-8" }],
@@ -80,7 +80,9 @@ export async function serveSettings(request: IncomingMessage, response: ServerRe
       if (request.headers["content-type"]?.split(";")[0].trim().toLowerCase() !== "application/json") {
         throw new RequestError(415, "Send settings with the application/json content type.");
       }
-      send(response, 200, jsonType, JSON.stringify(await saveSettings(path, await requestJson(request))));
+      const requested = parseSettings(await requestJson(request));
+      const saved = await updateSettings(path, ({ reports }) => ({ ...requested, reports }));
+      send(response, 200, jsonType, JSON.stringify(saved));
     } else {
       response.setHeader("Allow", asset === undefined ? "GET, PUT" : "GET");
       throw new RequestError(405, "This settings route does not support that method.");
