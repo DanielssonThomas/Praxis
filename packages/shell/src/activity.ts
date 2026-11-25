@@ -22,6 +22,7 @@ const labels: Record<ApprovalActivity["state"], string> = {
   invalidated: "Invalidated",
   refused: "Refused",
   uncertain: "Execution unverified",
+  escalated: "Needs human review",
 };
 
 function feedback(text: string): void {
@@ -66,7 +67,7 @@ function upsert(item: ApprovalActivity): void {
   card.replaceChildren();
 
   const name = item.action.kind === "session.stop" ? "Stop worker" : item.action.kind === "session.inspect"
-    ? "Inspect worker" : item.action.kind;
+    ? "Inspect worker" : item.action.kind === "management.review" ? "Review background management" : item.action.kind;
   addText(card, "h3", `${name} · ${item.action.target.id}`);
   addText(card, "p", labels[item.state], "activity-state");
   addText(card, "p", `Requested by ${item.actorId}`, "activity-action-text");
