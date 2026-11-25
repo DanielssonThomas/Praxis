@@ -15,6 +15,9 @@ import {
 import type { Event, Session, Task, Usage } from "@praxis/contracts";
 import type { ZodType } from "zod";
 import { z } from "zod";
+import { initializeManagement, ManagementQueue } from "./management.js";
+export { managementWorkSchema } from "./management.js";
+export type { ManagementClaim, ManagementEntry, ManagementWork } from "./management.js";
 
 type StoredRecord = Task | Session | Event | Usage;
 type WriteResult = "inserted" | "duplicate";
@@ -90,6 +93,7 @@ function initialize(database: DatabaseSync): void {
         payload TEXT NOT NULL
       ) STRICT
     `);
+    initializeManagement(database);
     database.exec("COMMIT");
   } catch (error) {
     database.exec("ROLLBACK");
@@ -99,6 +103,7 @@ function initialize(database: DatabaseSync): void {
 
 export class OperationalStore {
   readonly #database: DatabaseSync;
+  readonly management: ManagementQueue;
 
   constructor(path: string) {
     this.#database = storage("open", () => new DatabaseSync(path, { timeout: 5_000 }));
@@ -108,6 +113,14 @@ export class OperationalStore {
       this.#database.close();
       throw error;
     }
+    this.management = new ManagementQueue(this.#database, {
+      transaction: (write) => this.#transaction(write),
+      getTask: (id) => this.getTask(id),
+      getSession: (id) => this.getSession(id),
+      recordSession: (session) => this.recordSession(session),
+      recordUsage: (usage) => this.recordUsage(usage),
+      appendEvent: (event) => this.appendEvent(event),
+    });
   }
 
   close(): void {

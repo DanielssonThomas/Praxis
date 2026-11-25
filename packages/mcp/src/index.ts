@@ -157,7 +157,7 @@ function makeMcp({ store, runtime, memory }: Options, grant: Grant): McpServer {
   }, ({ sessionId }) => answer(() => inspectScopedWorker({ store, runtime }, grant, sessionId)));
 
   mcp.registerTool("report_worker", {
-    description: "Record progress, a result or a blocker for a worker session authorized to report.",
+    description: "Record progress, a question, a result or a blocker for a worker session authorized to report.",
     inputSchema: z.strictObject({
       ...submission,
       sessionId: sessionIdSchema,
