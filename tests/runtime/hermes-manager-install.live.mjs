@@ -161,6 +161,7 @@ test("the installed Linux manager loads its policy and responds while an indepen
   const soul = join(profileHome, "SOUL.md");
   const credentialFile = join(profileHome, ".env");
   assert.match(await readFile(soul, "utf8"), /concise, professional engineering manager/);
+  assert.match(await readFile(soul, "utf8"), /\[\[praxis:task:task_EXAMPLE\]\].*\[\[praxis:session:session_EXAMPLE\]\]/);
   assert.match(await readFile(config, "utf8"), /\$\{PRAXIS_MCP_TOKEN\}/);
   assert.doesNotMatch(await readFile(credentialFile, "utf8"), /local-root-do-not-copy/);
   for (const file of ["auth.json", "sessions/original.jsonl"]) {
