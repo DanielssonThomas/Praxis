@@ -64,6 +64,40 @@ export const runtimeSessionSnapshotSchema = z.strictObject({
 });
 export type RuntimeSessionSnapshot = z.infer<typeof runtimeSessionSnapshotSchema>;
 
+export const workerAssignmentRequestSchema = z.strictObject({
+  task: taskSchema, session: sessionSchema, brief: z.unknown().refine((value) => value !== undefined),
+}).refine(({ task, session }) => session.taskId === task.id, "The session must belong to the assigned task");
+export type WorkerAssignmentRequest = z.infer<typeof workerAssignmentRequestSchema>;
+
+export const workerAssignmentSchema = z.strictObject({
+  ...version, taskId: taskIdSchema, sessionId: sessionIdSchema,
+  runtime: z.enum(["codex", "claude", "hermes"]),
+  runId: recordId("worker"),
+});
+export type WorkerAssignment = z.infer<typeof workerAssignmentSchema>;
+
+export type WorkerCapability = { available: true } | { available: false; reason: string };
+export interface WorkerCapabilities {
+  host: { runtime: WorkerAssignment["runtime"]; version?: string; os: string; architecture: string; surface: string };
+  launch: WorkerCapability;
+  output: WorkerCapability;
+  cancellation: WorkerCapability;
+  completion: WorkerCapability;
+}
+
+export interface WorkerObservation {
+  snapshot: RuntimeSessionSnapshot;
+  usage: Usage;
+}
+
+export interface WorkerExecutor {
+  capabilities(): Promise<WorkerCapabilities>;
+  createAssignment(request: WorkerAssignmentRequest): Promise<WorkerAssignment>;
+  inspectAssignment(assignment: WorkerAssignment): WorkerObservation | Promise<WorkerObservation>;
+  stopAssignment(assignment: WorkerAssignment): WorkerObservation | Promise<WorkerObservation>;
+  waitAssignment(assignment: WorkerAssignment): Promise<WorkerObservation>;
+}
+
 const taskReference = z.strictObject({ kind: z.literal("task"), id: taskIdSchema });
 const sessionReference = z.strictObject({ kind: z.literal("session"), id: sessionIdSchema });
 const actionReference = z.strictObject({ kind: z.literal("action"), id: actionIdSchema });

@@ -2,7 +2,9 @@
   "name": "praxis",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "engines": {
     "node": "24.x",
     "npm": "11.x"
@@ -19,7 +21,8 @@
     "test:overview:live": "node --test tests/runtime/overview.live.mjs",
     "test:control:live": "node --test tests/runtime/control.live.mjs",
     "typecheck": "tsc --project tsconfig.json",
-    "build": "tsc --project packages/contracts/tsconfig.json && tsc --project packages/state/tsconfig.json && tsc --project packages/settings/tsconfig.json && tsc --project packages/hermes-runtime/tsconfig.json && tsc --project packages/mcp/tsconfig.json && tsc --project packages/approvals/tsconfig.json && tsc --project packages/kanban/tsconfig.json && tsc --project packages/shell/tsconfig.json"
+    "build": "tsc --project packages/contracts/tsconfig.json && tsc --project packages/state/tsconfig.json && tsc --project packages/settings/tsconfig.json && tsc --project packages/hermes-runtime/tsconfig.json && tsc --project packages/codex-runtime/tsconfig.json && tsc --project packages/mcp/tsconfig.json && tsc --project packages/approvals/tsconfig.json && tsc --project packages/kanban/tsconfig.json && tsc --project packages/shell/tsconfig.json",
+    "test:codex:live": "node --test tests/runtime/codex.live.mjs"
   },
   "devDependencies": {
     "playwright": "1.65.1",

@@ -20,3 +20,5 @@ Read [contributor instructions](AGENTS.md) before working on an issue. See the [
 ## Application shell
 
 After building, run `npm start` and open the printed local URL. Open **Menu** to switch views, or run `/help` in the command bar. See [navigation and browser checks](docs/shell.md) and [portable settings](docs/settings.md).
+
+The local worker API can run direct Codex assignments on the pinned Linux host. [Direct Codex workers](docs/codex-worker.md)

@@ -15,7 +15,7 @@ The contracts cover Praxis operational records. Axiom owns task briefs, effectiv
 | Area | Owner |
 | --- | --- |
 | Record identity, versioning and runtime snapshots | Shared contracts package |
-| Native execution and identifiers | Hermes and its Praxis adapter |
+| Native execution and identifiers | [Hermes runtime](hermes-runtime.md) and [direct Codex worker](codex-worker.md) adapters |
 | Native task projection and provider issue links | [Kanban](kanban.md) |
 | Local persistence, references and event replay | [Local state store](operational-state.md) |
 | Agent coordination and scoped request intake | [Praxis MCP](mcp.md) |
