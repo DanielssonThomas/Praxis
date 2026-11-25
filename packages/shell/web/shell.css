@@ -198,3 +198,18 @@ button[type="submit"] { background: var(--accent); color: var(--button-text); bo
   border-radius: .4rem;
 }
 #reports-local-preferences label:has(input) { display: flex; align-items: center; gap: .25rem; }
+
+.manager-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+#manager-auth { margin: 0.75rem 0 0; display: flex; flex-wrap: wrap; align-items: end; gap: 0.55rem; }
+#manager-auth label { display: grid; gap: 0.2rem; }
+#manager-status, .manager-context { color: var(--muted); margin-block: 0.5rem; }
+#manager-conversation { max-inline-size: 48rem; }
+#manager-transcript { display: grid; gap: 0.65rem; list-style: none; padding: 0; margin-block: 0.8rem; }
+.manager-message { background: var(--panel); border: 1px solid var(--border); border-radius: 0.55rem; padding: 0.65rem 0.85rem; }
+.manager-message p { margin-block: 0.2rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.manager-cards { display: grid; gap: 0.45rem; inline-size: min(100%, 22rem); margin: 0.65rem 0 0 auto; }
+.manager-cards article { display: grid; gap: 0.35rem; background: var(--surface); }
+.manager-cards .kanban-card + .kanban-card { margin-block-start: 0; }
+.manager-cards h3 { margin: 0; font-size: 0.95rem; overflow-wrap: anywhere; }
+.manager-cards summary { cursor: pointer; color: var(--accent); }
+.manager-cards button { justify-self: start; }

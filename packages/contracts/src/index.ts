@@ -148,7 +148,7 @@ const actionLifecycleSchema = z.discriminatedUnion("stage", [
 ]);
 export type ActionLifecycle = z.infer<typeof actionLifecycleSchema>;
 
-export const workerReportPhaseSchema = z.enum(["progress", "result", "blocked"]);
+export const workerReportPhaseSchema = z.enum(["progress", "result", "blocked", "question"]);
 export const workerReportMessageSchema = nonblankText.max(8_192);
 const githubWorkReference = z.strictObject({
   provider: z.literal("github"),
@@ -184,6 +184,10 @@ const eventDetailsSchema = z.discriminatedUnion("type", [
   }),
   z.strictObject({ type: z.literal("issue_link"), issue: githubIssueReferenceSchema }),
   z.strictObject({ type: z.literal("provider_delivery"), reference: githubWorkReference }),
+  z.strictObject({
+    type: z.literal("management_escalation"), workId: eventIdSchema, actorId: principalIdSchema, reason: nonblankText.max(1_024),
+    action: actionSchema,
+  }),
 ]);
 
 export const eventSchema = z.strictObject({
@@ -217,6 +221,10 @@ export const eventSchema = z.strictObject({
   if (details?.type === "provider_delivery"
     && (subject.kind !== "task" || !providerDeliveryEventKindSchema.safeParse(kind).success)) {
     context.addIssue({ code: "custom", path: ["details"], message: "Provider delivery details require a delivery event and a task subject" });
+  }
+  if (details?.type === "management_escalation" && (kind !== "management.escalated" || subject.kind !== "task"
+    || details.action.kind !== "management.review" || details.action.target.kind !== "task" || details.action.target.id !== subject.id)) {
+    context.addIssue({ code: "custom", path: ["details"], message: "Management review requires its exact task subject" });
   }
 });
 export type Event = z.infer<typeof eventSchema>;

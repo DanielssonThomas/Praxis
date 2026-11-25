@@ -26,9 +26,13 @@ With `policy.axiomEnabled` disabled, the installer skips Axiom assembly and life
 3. Start the native gateway from its explicit default profile under the dedicated root. Set `HERMES_HOME` to the installed root, `API_SERVER_ENABLED=true`, `API_SERVER_HOST=127.0.0.1`, `API_SERVER_PORT` to the chosen local port, and `API_SERVER_KEY` to the default gateway's bearer. Run `hermes -p default gateway run`.
 4. Set `PRAXIS_HERMES_ORIGIN` to the named gateway URL, such as `http://127.0.0.1:8642/p/praxis-manager`. Set `PRAXIS_HERMES_API_KEY` to the named profile's bearer. [Hermes connection details](hermes-runtime.md)
 
+The [foreground manager endpoint](manager-foreground.md) uses this named connection.
+
+New profiles include instructions for [related task and worker cards](manager-foreground.md#related-tasks-and-workers). To opt in with an existing editable profile, copy the reference paragraph from the [manager template](../scripts/hermes-manager-soul.md) into that profile's `SOUL.md`.
+
 ## Verify the setup
 
-With a built checkout of Praxis, use the pinned Hermes source executable and pinned built Axiom checkout for the following native smoke test. The fixture creates disposable user and Hermes roots and uses a scripted localhost provider.
+With a built checkout of Praxis, use Chromium, the pinned Hermes source executable and the pinned built Axiom checkout for the following native smoke test. Set `PRAXIS_TEST_CHROMIUM` to use an installed system browser. The fixture creates disposable user and Hermes roots and uses a scripted localhost provider.
 
 ```sh
 PRAXIS_HERMES_BIN=/absolute/path/to/hermes \

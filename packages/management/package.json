@@ -1,0 +1,21 @@
+{
+  "name": "@praxis/management",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@praxis/contracts": "0.1.0",
+    "@praxis/hermes-runtime": "0.1.0",
+    "@praxis/mcp": "0.1.0",
+    "@praxis/state": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2"
+  }
+}

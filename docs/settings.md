@@ -9,3 +9,5 @@ The file records selected Axiom profiles, the Hermes manager profile and model, 
 The [Reports view](reports.md) can add local reporting preferences to the same file. Existing configuration files without these preferences use report defaults. Saving through the general editor preserves report preferences and history settings.
 
 Only the declared preference fields are accepted. Keep tokens and other credentials in the selected host's native credential configuration. Axiom, memory and automatic presentation have independent preferences. Host authentication and permissions apply regardless of the Axiom setting. Runtime integrations own profile activation, model availability and budget enforcement.
+
+Engineering memory requires a user-selected directory and manager project grant in the MCP authority file. Turn off **Enable engineering memory** to pause manager access and retain the notes. [Project memory setup](mcp.md#project-memory)

@@ -10,6 +10,7 @@
       "@praxis/hermes-runtime": ["./packages/hermes-runtime/src/index.ts"],
       "@praxis/kanban": ["./packages/kanban/src/index.ts"],
       "@praxis/kanban/http": ["./packages/kanban/src/http.ts"],
+      "@praxis/management": ["./packages/management/src/index.ts"],
       "@praxis/mcp": ["./packages/mcp/src/index.ts"],
       "@praxis/settings": ["./packages/settings/src/index.ts"],
       "@praxis/settings/http": ["./packages/settings/src/http.ts"],

@@ -22,6 +22,8 @@ import type { HermesRuntime } from "@praxis/hermes-runtime";
 import { OperationalStoreError } from "@praxis/state";
 import type { OperationalStore } from "@praxis/state";
 import { z } from "zod";
+import { MemoryError, memoryId, recordMemorySchema, retrieveMemorySchema } from "./memory.js";
+import type { ProjectMemory } from "./memory.js";
 
 const sessionGrant = z.strictObject({
   sessionId: sessionIdSchema,
@@ -42,6 +44,10 @@ const grantSchema = z.strictObject({
     "Granted session IDs must be unique",
   ),
   actionKinds: z.array(actionSchema.shape.kind),
+  memoryProjects: z.array(z.strictObject({ projectId: memoryId, canWrite: z.boolean() })).refine(
+    (projects) => new Set(projects.map(({ projectId }) => projectId)).size === projects.length,
+    "Granted memory projects must be unique",
+  ).optional(),
 });
 export type McpGrant = z.infer<typeof grantSchema>;
 type Grant = McpGrant;
@@ -56,12 +62,14 @@ export const mcpAuthoritySchema = z.strictObject({
   schemaVersion: z.literal(contractVersion),
   database: z.string().min(1),
   grants: mcpGrantsSchema,
+  memory: z.strictObject({ directory: z.string().min(1) }).optional(),
 });
 
 interface Options {
   store: OperationalStore;
   grants: unknown;
   runtime?: Pick<HermesRuntime, "inspectAssignment">;
+  memory?: { service: ProjectMemory; enabled: () => Promise<boolean> };
 }
 type ToolErrorCode = "forbidden" | "not_found";
 
@@ -103,6 +111,7 @@ async function answer(operation: () => Record<string, unknown> | Promise<Record<
     return result(await operation());
   } catch (error) {
     if (error instanceof ToolError) return result({ code: error.code, message: error.message }, true);
+    if (error instanceof MemoryError) return result({ code: error.code, message: error.message }, true);
     if (error instanceof OperationalStoreError && error.code === "identity_conflict") {
       return result({ code: "identity_conflict", message: "This submission ID already records different content." }, true);
     }
@@ -115,36 +124,40 @@ const submission = {
   occurredAt: eventSchema.shape.occurredAt,
 };
 
-function makeMcp({ store, runtime }: Options, grant: Grant): McpServer {
+export function inspectScopedTask(store: OperationalStore, grant: McpGrant, taskId: TaskId) {
+  permitTask(grant, taskId);
+  return required(store.getTask(taskId));
+}
+
+export async function inspectScopedWorker({ store, runtime }: Pick<Options, "store" | "runtime">, grant: McpGrant, sessionId: SessionId) {
+  const { assignment } = permitSession(grant, sessionId);
+  const session = required(store.getSession(sessionId));
+  if (assignment === undefined) return { session, runtime: { availability: "unavailable" as const, reason: "No native assignment is bound to this session." } };
+  if (runtime === undefined) return { session, runtime: { availability: "unavailable" as const, reason: "No native runtime is configured." } };
+  if (assignment.taskId !== session.taskId) throw new ToolError("forbidden", "The native assignment is outside the session's scope.");
+  const snapshot = runtimeSessionSnapshotSchema.parse(await runtime.inspectAssignment(assignment));
+  if (snapshot.sessionId !== session.id || snapshot.taskId !== session.taskId) {
+    throw new ToolError("forbidden", "The native snapshot is outside the session's scope.");
+  }
+  return { session, runtime: { availability: "available" as const, snapshot } };
+}
+
+function makeMcp({ store, runtime, memory }: Options, grant: Grant): McpServer {
   const mcp = new McpServer({ name: "praxis", version: "1.0.0" });
   mcp.registerTool("inspect_task", {
     description: "Read a task in the authenticated principal's scope.",
     inputSchema: z.strictObject({ taskId: taskIdSchema }),
     annotations: { readOnlyHint: true },
-  }, ({ taskId }) => answer(() => {
-    permitTask(grant, taskId);
-    return { task: required(store.getTask(taskId)) };
-  }));
+  }, ({ taskId }) => answer(() => ({ task: inspectScopedTask(store, grant, taskId) })));
 
   mcp.registerTool("inspect_worker", {
     description: "Read a scoped worker session and its native runtime snapshot when available.",
     inputSchema: z.strictObject({ sessionId: sessionIdSchema }),
     annotations: { readOnlyHint: true },
-  }, ({ sessionId }) => answer(async () => {
-    const { assignment } = permitSession(grant, sessionId);
-    const session = required(store.getSession(sessionId));
-    if (assignment === undefined) return { session, runtime: { availability: "unavailable", reason: "No native assignment is bound to this session." } };
-    if (runtime === undefined) return { session, runtime: { availability: "unavailable", reason: "No native runtime is configured." } };
-    if (assignment.taskId !== session.taskId) throw new ToolError("forbidden", "The native assignment is outside the session's scope.");
-    const snapshot = runtimeSessionSnapshotSchema.parse(await runtime.inspectAssignment(assignment));
-    if (snapshot.sessionId !== session.id || snapshot.taskId !== session.taskId) {
-      throw new ToolError("forbidden", "The native snapshot is outside the session's scope.");
-    }
-    return { session, runtime: { availability: "available", snapshot } };
-  }));
+  }, ({ sessionId }) => answer(() => inspectScopedWorker({ store, runtime }, grant, sessionId)));
 
   mcp.registerTool("report_worker", {
-    description: "Record progress, a result or a blocker for a worker session authorized to report.",
+    description: "Record progress, a question, a result or a blocker for a worker session authorized to report.",
     inputSchema: z.strictObject({
       ...submission,
       sessionId: sessionIdSchema,
@@ -196,6 +209,32 @@ function makeMcp({ store, runtime }: Options, grant: Grant): McpServer {
     });
     return { status: "pending", event, write: store.appendEvent(event) };
   }));
+
+  if (memory && grant.memoryProjects?.length) {
+    const permitMemory = async (projectId: string, write: boolean) => {
+      const project = grant.memoryProjects?.find((item) => item.projectId === projectId);
+      if (!project || (write && !project.canWrite)) {
+        throw new ToolError("forbidden", "The memory operation is outside the principal's project scope.");
+      }
+      if (!await memory.enabled()) throw new MemoryError("disabled", "Engineering memory is disabled in Praxis settings.");
+    };
+    mcp.registerTool("retrieve_memory", {
+      description: "Retrieve decisions and verified findings from an authorized project by note ID or text search.",
+      inputSchema: retrieveMemorySchema,
+      annotations: { readOnlyHint: true },
+    }, (input) => answer(async () => {
+      await permitMemory(input.projectId, false);
+      return memory.service.retrieve(input);
+    }));
+    mcp.registerTool("record_memory", {
+      description: "Save a project decision or verified finding. Supply verification evidence for a finding and reuse the note ID when retrying.",
+      inputSchema: recordMemorySchema,
+      annotations: { destructiveHint: false, idempotentHint: true },
+    }, (input) => answer(async () => {
+      await permitMemory(input.projectId, true);
+      return memory.service.record(input);
+    }));
+  }
 
   return mcp;
 }

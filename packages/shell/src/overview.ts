@@ -1,5 +1,6 @@
 import type { OverviewPane, OverviewProjection } from "./overview-server.js";
 import type { SessionControlView } from "./session-control.js";
+import { workerStatus } from "./work-card.js";
 
 const view = document.querySelector<HTMLElement>('[data-view="overview"]')!;
 const auth = document.querySelector<HTMLFormElement>("#overview-auth")!;
@@ -210,7 +211,7 @@ function render(projection: OverviewProjection): void {
     elements.card.dataset.highlighted = String(pane.highlighted);
     elements.focus.hidden = !pane.highlighted;
     const observed = pane.runtime;
-    elements.status.textContent = observed.availability === "available" ? observed.snapshot.status.replaceAll("_", " ") : "Unavailable";
+    elements.status.textContent = workerStatus(observed.availability === "available" ? observed.snapshot.status : undefined);
     let text: string;
     if (observed.availability === "unavailable") text = observed.reason;
     else if (observed.snapshot.output.availability === "unavailable") text = observed.snapshot.output.reason;
