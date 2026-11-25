@@ -30,7 +30,7 @@ The [foreground manager endpoint](manager-foreground.md) uses this named connect
 
 ## Verify the setup
 
-With a built checkout of Praxis, use the pinned Hermes source executable and pinned built Axiom checkout for the following native smoke test. The fixture creates disposable user and Hermes roots and uses a scripted localhost provider.
+With a built checkout of Praxis, use Chromium, the pinned Hermes source executable and the pinned built Axiom checkout for the following native smoke test. Set `PRAXIS_TEST_CHROMIUM` to use an installed system browser. The fixture creates disposable user and Hermes roots and uses a scripted localhost provider.
 
 ```sh
 PRAXIS_HERMES_BIN=/absolute/path/to/hermes \
