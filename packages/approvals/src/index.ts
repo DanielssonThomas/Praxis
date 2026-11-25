@@ -33,7 +33,7 @@ export type ApprovalActivity = ActionRequest & (
   | { state: "attention"; approval: Approval; expiresAt: string }
   | { state: "resolved"; native: RuntimeSessionSnapshot }
   | { state: "denied" }
-  | { state: "expired" | "invalidated" | "refused" | "uncertain"; reason: string }
+  | { state: "expired" | "invalidated" | "refused" | "uncertain" | "escalated"; reason: string }
 );
 
 type ApprovalErrorCode = "invalid_input" | "not_found" | "invalid_approval" | "already_decided" | "expired"
@@ -93,9 +93,14 @@ export class ApprovalService {
 
   async list(): Promise<ApprovalActivity[]> {
     const grants = await this.#grants();
-    return this.#store.eventsOfKind("action.requested")
+    const requests = this.#store.eventsOfKind("action.requested")
       .filter((event) => event.details?.type === "action_request")
       .map((event) => this.#activity(readRequest(event), grants));
+    const escalations: ApprovalActivity[] = this.#store.eventsOfKind("management.escalated").flatMap(({ id, details }) =>
+      details?.type === "management_escalation" ? [{
+        requestId: id, actorId: details.actorId, action: details.action, state: "escalated", reason: details.reason,
+      }] : []);
+    return [...requests, ...escalations];
   }
 
   async advanceRoutine(): Promise<void> {
