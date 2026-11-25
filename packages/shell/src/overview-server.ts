@@ -11,6 +11,8 @@ import type { HermesOutputCursor } from "@praxis/hermes-runtime";
 import { mcpAuthoritySchema } from "@praxis/mcp";
 import type { McpGrant } from "@praxis/mcp";
 import { OperationalStore, OperationalStoreError } from "@praxis/state";
+import { resolveManagerResource, unavailableManagerResources } from "./manager-resources.js";
+import type { ReadManagerResources } from "./manager-resources.js";
 import { SessionControlError, SessionControlService } from "./session-control.js";
 import type { ControlBinding, SessionControlView } from "./session-control.js";
 
@@ -200,5 +202,10 @@ export async function overviewRoutesFromEnv(loadActivity?: () => Promise<Approva
     return true;
   }
 
-  return { serve, close: () => store.close() };
+  const readManagerResources: ReadManagerResources = async (references) => {
+    const grant = (await loadGrants()).find(({ principalId }) => principalId === managerPrincipal);
+    if (!grant) return unavailableManagerResources(references);
+    return Promise.all(references.map((reference) => resolveManagerResource(store, runtime, grant, reference)));
+  };
+  return { serve, readManagerResources, close: () => store.close() };
 }

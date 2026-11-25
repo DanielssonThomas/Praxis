@@ -85,8 +85,16 @@ test("the installed Linux manager loads its policy and responds while an indepen
   const settingsFile = join(directory, "settings.json");
   const task = { schemaVersion: 1, id: "task_installed_manager", title: "Installed Praxis manager fixture" };
   const worker = { schemaVersion: 1, taskId: task.id, id: "session_foreground_fixture_worker" };
+  const foreign = { schemaVersion: 1, id: "task_foreign_card", title: "Foreign task details must stay scoped" };
+  const missingCard = "task_missing_card";
+  const resourceFooter = [
+    `[[praxis:task:${task.id}]]`, `[[praxis:session:${worker.id}]]`, `[[praxis:task:${missingCard}]]`,
+    `[[praxis:task:${foreign.id}]]`, `[[praxis:task:${worker.id}]]`, `[[praxis:task:${task.id}]]`,
+  ].join("\n");
   const workerPrompt = "Hold the distinct fixture worker until the operator decides.";
   const unknownPrompt = "Read the unavailable fixture task.";
+  const disabledPrompt = "Show relevant cards with automatic presentation disabled.";
+  const disabledReply = "The work remains available in the conversation.";
   const actionPrompts = new Map([
     ["Cancel the active fixture worker.", { kind: "session.stop", target: { kind: "session", id: worker.id } }],
     ["Delegate the fixture task.", { kind: "task.delegate", target: { kind: "task", id: task.id } }],
@@ -131,10 +139,11 @@ test("the installed Linux manager loads its policy and responds while an indepen
     await rm(directory, { force: true, recursive: true, maxRetries: 3 });
   });
   store.recordTask(task);
+  store.recordTask(foreign);
   store.recordSession(worker);
   const grant = {
     principalId: "principal_installed_manager", tokenDigest: digest(localToken),
-    taskIds: [task.id], sessions: [{ sessionId: worker.id, canReport: false }],
+    taskIds: [task.id, missingCard], sessions: [{ sessionId: worker.id, canReport: false }],
     actionKinds: [...actionPrompts.values()].map(({ kind }) => kind),
   };
   installedMcp = createPraxisMcpServer({ store, grants: [grant] });
@@ -152,6 +161,7 @@ test("the installed Linux manager loads its policy and responds while an indepen
   const soul = join(profileHome, "SOUL.md");
   const credentialFile = join(profileHome, ".env");
   assert.match(await readFile(soul, "utf8"), /concise, professional engineering manager/);
+  assert.match(await readFile(soul, "utf8"), /\[\[praxis:task:task_EXAMPLE\]\].*\[\[praxis:session:session_EXAMPLE\]\]/);
   assert.match(await readFile(config, "utf8"), /\$\{PRAXIS_MCP_TOKEN\}/);
   assert.doesNotMatch(await readFile(credentialFile, "utf8"), /local-root-do-not-copy/);
   for (const file of ["auth.json", "sessions/original.jsonl"]) {
@@ -168,6 +178,7 @@ test("the installed Linux manager loads its policy and responds while an indepen
     const lastUser = call.messages.findLastIndex(({ role }) => role === "user");
     const input = call.messages[lastUser]?.content;
     if (input === workerPrompt) return { ...reply("Distinct worker output"), holdAfterMessage: holdWorker };
+    if (input === disabledPrompt) return reply(`${disabledReply}\n\n${resourceFooter}`);
 
     const recent = call.messages.slice(lastUser + 1).filter(({ role }) => role === "tool");
     const invoke = (name, args) => names.includes(name)
@@ -197,7 +208,7 @@ test("the installed Linux manager loads its policy and responds while an indepen
         // Other tool result formats remain covered by the authenticated task assertion.
       }
     }
-    if (sawTask) return { ...reply(finalReply), holdAfterMessage: holdForeground };
+    if (sawTask) return { ...reply(`${finalReply}\n\n${resourceFooter}`), holdAfterMessage: holdForeground };
     if (schemas.every((name) => names.includes(name))) sawSchemas = true;
     if (!described && !sawSchemas && names.includes("tool_describe")) {
       described = true;
@@ -282,13 +293,15 @@ test("the installed Linux manager loads its policy and responds while an indepen
   await until(async () => (await runtime.inspectAssignment(workerAssignment)).status === "running",
     "The independent worker did not start");
   const authority = join(directory, "authority.json");
-  await writeFile(authority, JSON.stringify({ schemaVersion: 1, database: join(directory, "state.sqlite"), grants: [{
-    ...grant, sessions: [{ ...grant.sessions[0], assignment: workerAssignment }],
-  }] }), { mode: 0o600 });
+  await writeFile(authority, JSON.stringify({ schemaVersion: 1, database: join(directory, "state.sqlite"), grants: [
+    { ...grant, sessions: [{ ...grant.sessions[0], assignment: workerAssignment }] },
+    { principalId: "principal_foreign_card", tokenDigest: digest(randomUUID()), taskIds: [foreign.id], sessions: [], actionKinds: [] },
+  ] }), { mode: 0o600 });
   const operator = randomBytes(32).toString("base64url");
   shell = await startShell(directory, {
     PRAXIS_MCP_CONFIG_FILE: authority, PRAXIS_OPERATOR_TOKEN_DIGEST: digest(operator),
     PRAXIS_HERMES_ORIGIN: base, PRAXIS_HERMES_API_KEY: managerKey,
+    PRAXIS_OVERVIEW_MANAGER_PRINCIPAL_ID: grant.principalId,
   });
   const privateCall = (path, payload) => fetch(new URL(path, shell.origin), {
     method: payload === undefined ? "GET" : "POST",
@@ -330,6 +343,21 @@ test("the installed Linux manager loads its policy and responds while an indepen
 
   await page.getByRole("button", { name: "Lock manager", exact: true }).click();
   await openManager();
+  // Clone at the browser's fetch boundary before either reader starts consuming the replay stream.
+  const replay = await page.evaluateHandle(() => {
+    const originalFetch = window.fetch;
+    const body = new Promise((resolve, reject) => {
+      window.fetch = (url, options) => {
+        const response = originalFetch.call(window, url, options);
+        if (url === "/api/manager/turn" && options?.method === "POST") {
+          window.fetch = originalFetch;
+          void response.then((value) => value.clone().text()).then(resolve, reject);
+        }
+        return response;
+      };
+    });
+    return { body };
+  });
   const resumed = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/manager/turn"
     && response.request().method() === "POST");
   const beforeReconnect = prompts.length;
@@ -337,7 +365,8 @@ test("the installed Linux manager loads its policy and responds while an indepen
   const replayResponse = await resumed;
   assert.equal(replayResponse.status(), 200);
   releaseForeground();
-  const records = (await replayResponse.text()).trim().split("\n").map(JSON.parse);
+  const records = (await replay.evaluate(({ body }) => body)).trim().split("\n").map(JSON.parse);
+  await replay.dispose();
   const result = records.at(-1);
   assert.equal(result.snapshot.status, "completed");
   await page.locator("#manager-status").waitFor({ state: "hidden" });
@@ -351,6 +380,33 @@ test("the installed Linux manager loads its policy and responds while an indepen
   assert.equal(result.snapshot.sessionId, "session_foreground_manager");
   assert.notEqual(result.runId, workerAssignment.runId);
   assert.equal(result.snapshot.output.text, finalReply);
+  assert.deepEqual(result.resources?.map(({ kind }) => kind).sort(), ["session", "task", "unavailable", "unavailable"]);
+  assert.ok(!JSON.stringify(result).includes(foreign.id));
+  assert.ok(!JSON.stringify(result).includes(foreign.title));
+  assert.ok(!JSON.stringify(result).includes(missingCard));
+  const taskCard = page.getByRole("article", { name: task.title });
+  await taskCard.getByText("Details", { exact: true }).click();
+  await taskCard.getByText(task.id, { exact: true }).waitFor();
+  const workerCard = page.getByRole("article", { name: "Worker session", exact: true });
+  await workerCard.getByText("running", { exact: true }).waitFor();
+  await workerCard.getByText("Details", { exact: true }).click();
+  await workerCard.getByText(worker.id, { exact: true }).waitFor();
+  assert.equal(await page.getByRole("article", { name: "Task unavailable", exact: true }).count(), 2);
+  await taskCard.getByRole("button", { name: "Dismiss", exact: true }).click();
+  await taskCard.waitFor({ state: "detached" });
+  await command("/s");
+  const preferences = page.frameLocator('iframe[title="Praxis settings"]');
+  await preferences.getByRole("checkbox", { name: "Show relevant cards automatically" }).uncheck();
+  await preferences.getByRole("button", { name: "Save settings" }).click();
+  await preferences.getByRole("status").getByText("Settings saved.").waitFor();
+  await command("/m");
+  await command(disabledPrompt);
+  const disabledMessage = page.getByRole("listitem").filter({ hasText: disabledReply });
+  await disabledMessage.waitFor();
+  await page.locator("#manager-status").waitFor({ state: "hidden" });
+  assert.equal(await disabledMessage.getByRole("article").count(), 0);
+  assert.equal(await page.getByRole("article", { name: "Worker session", exact: true }).count(), 1);
+  assert.equal(await page.getByText(foreign.title, { exact: true }).count(), 0);
   assert.equal(sawSchemas, true);
   assert.equal(sawTask, true);
   const receipt = await fetch(`${base}/v1/runs/${result.runId}`, {
@@ -390,5 +446,5 @@ test("the installed Linux manager loads its policy and responds while an indepen
   releaseWorker();
   await until(async () => (await runtime.inspectAssignment(workerAssignment)).status === "stopped",
     "The approved cancellation did not stop the exact worker");
-  t.diagnostic("Chromium received grounded output during another native run, navigated locally, and recovered the same turn after lock/reopen. Missing scope and scoped Activity are explicit.");
+  t.diagnostic("Chromium recovered the grounded turn, rendered scoped task and live worker cards, hid missing and foreign details, and honored the saved card preference. Scoped Activity remained available.");
 });

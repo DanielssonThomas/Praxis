@@ -32,3 +32,9 @@ A granted cancel intent records `session.stop` in Activity. The operator must ap
 ## Verify
 
 The [native manager fixture](hermes-manager.md#verify-the-setup) exercises the installed manager, its private stream in Chromium, a read through real Hermes MCP, and a separate running Hermes worker. It observes foreground output before worker completion, navigation and stable-ID reconnect, scoped action recording, and the exact approved worker stop. Its provider is scripted on localhost.
+
+## Related tasks and workers
+
+Manager can attach cards to a completed reply. In the shell environment, set `PRAXIS_OVERVIEW_MANAGER_PRINCIPAL_ID` to the manager's exact principal in the same `PRAXIS_MCP_CONFIG_FILE` used by the [local authority](mcp.md). Cards use that principal's task and session grants, with the same scoped reads as the MCP tools.
+
+The [manager profile template](../scripts/hermes-manager-soul.md) describes the optional footer for manager replies. The shell accepts up to four distinct task or session references at the end of a reply and reads details from Praxis and the bound Hermes run. Missing and unauthorized references both produce a generic unavailable card. Cards show the status observed when the reply finishes. Expand or dismiss a card in the conversation. In **Settings → Display**, clear **Show relevant cards automatically** to turn off cards on subsequent replies.

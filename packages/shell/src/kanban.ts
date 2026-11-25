@@ -1,4 +1,5 @@
 import type { KanbanProjection, KanbanTask } from "@praxis/kanban";
+import { taskCard } from "./work-card.js";
 
 const authentication = document.querySelector<HTMLFormElement>("#kanban-auth")!;
 const tokenField = authentication.elements.namedItem("operatorToken") as HTMLInputElement;
@@ -27,14 +28,11 @@ function feedback(message: string): void {
 }
 
 function cardFor(task: KanbanTask, linking: boolean): HTMLElement {
-  const card = document.createElement("article");
-  card.className = "kanban-card";
+  const card = taskCard(task.task);
   card.dataset.nativeId = task.nativeId;
-  const heading = document.createElement("h3");
-  heading.textContent = task.task.title;
   const assignee = document.createElement("p");
   assignee.textContent = task.assignee === null ? task.nativeId : `${task.nativeId} · ${task.assignee}`;
-  card.append(heading, assignee);
+  card.append(assignee);
 
   if (task.links.length > 0) {
     const links = document.createElement("ul");
