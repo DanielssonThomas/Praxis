@@ -41,11 +41,12 @@ async function streamTurn(response: ServerResponse, runtime: HermesRuntime, assi
       if (controller.signal.aborted) return;
       cursor = current.cursor;
       let { snapshot } = current;
+      const { output } = snapshot;
       let resources;
-      if (snapshot.output.availability === "available") {
-        const { text, references } = splitManagerReferences(snapshot.output.text);
-        snapshot = { ...snapshot, output: { ...snapshot.output, text } };
-        if (snapshot.status === "completed" && !snapshot.output.truncated && references.length > 0) {
+      if (output.availability === "available") {
+        const { text, references } = splitManagerReferences(output.text);
+        snapshot = { ...snapshot, output: { ...output, text } };
+        if (snapshot.status === "completed" && !output.truncated && references.length > 0) {
           resources = await readResources(references);
         }
       }
