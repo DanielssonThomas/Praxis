@@ -13,7 +13,7 @@ import { HermesRuntime } from "@praxis/hermes-runtime";
 import { createPraxisMcpServer } from "@praxis/mcp";
 import { defaultSettings } from "@praxis/settings";
 import { OperationalStore } from "@praxis/state";
-import { providerFixture, stopProcess, until } from "./hermes-fixture.mjs";
+import { providerFixture, startShell, stopProcess, until } from "./hermes-fixture.mjs";
 
 const execute = promisify(execFile);
 const finalReply = "The named manager read the fixture task.";
@@ -50,7 +50,27 @@ async function close(server) {
   await new Promise((resolve) => server.close(resolve));
 }
 
-test("the installed Linux manager preserves local edits and loads the pinned policy and Praxis tools", { timeout: 120_000 }, async (t) => {
+async function readTurn(response, onRecord = () => {}) {
+  assert.equal(response.status, 200);
+  const decoded = response.body.pipeThrough(new TextDecoderStream());
+  const records = [];
+  let partial = "";
+  for await (const chunk of decoded) {
+    const lines = (partial + chunk).split("\n");
+    partial = lines.pop();
+    for (const line of lines) {
+      const record = JSON.parse(line);
+      assert.equal(record.kind, "snapshot");
+      records.push(record);
+      await onRecord(record);
+    }
+  }
+  assert.equal(partial, "");
+  assert.equal(records.at(-1)?.snapshot.status, "completed");
+  return records.at(-1);
+}
+
+test("the installed Linux manager loads its policy and responds while an independent native worker is active", { timeout: 150_000 }, async (t) => {
   const binary = process.env.PRAXIS_HERMES_BIN;
   const axiom = process.env.PRAXIS_AXIOM_ROOT;
   assert.ok(binary && axiom, "Set PRAXIS_HERMES_BIN and PRAXIS_AXIOM_ROOT to the pinned source builds.");
@@ -64,6 +84,14 @@ test("the installed Linux manager preserves local edits and loads the pinned pol
   const original = join(userHome, ".hermes");
   const settingsFile = join(directory, "settings.json");
   const task = { schemaVersion: 1, id: "task_installed_manager", title: "Installed Praxis manager fixture" };
+  const worker = { schemaVersion: 1, taskId: task.id, id: "session_foreground_fixture_worker" };
+  const workerPrompt = "Hold the distinct fixture worker until the operator decides.";
+  const unknownPrompt = "Read the unavailable fixture task.";
+  const actionPrompts = new Map([
+    ["Cancel the active fixture worker.", { kind: "session.stop", target: { kind: "session", id: worker.id } }],
+    ["Delegate the fixture task.", { kind: "task.delegate", target: { kind: "task", id: task.id } }],
+    ["Reprioritize the fixture task.", { kind: "task.reprioritize", target: { kind: "task", id: task.id } }],
+  ]);
   const profile = "praxis-fixture-manager";
   const profileHome = join(home, "profiles", profile);
   const nativeEnv = { PATH: process.env.PATH, HOME: userHome, PRAXIS_CONFIG_FILE: settingsFile };
@@ -82,10 +110,18 @@ test("the installed Linux manager preserves local edits and loads the pinned pol
   for (const [file, value] of Object.entries(sentinels)) await writeFile(join(original, file), value);
 
   let gateway;
+  let shell;
+  let releaseWorker;
+  let releaseForeground;
+  const holdWorker = new Promise((resolve) => { releaseWorker = resolve; });
+  const holdForeground = new Promise((resolve) => { releaseForeground = resolve; });
   let installedMcp;
   let provider;
   const store = new OperationalStore(join(directory, "state.sqlite"));
   t.after(async () => {
+    releaseWorker();
+    releaseForeground();
+    await stopProcess(shell?.processHandle);
     await stopProcess(gateway);
     await provider?.close();
     if (installedMcp?.listening) await close(installedMcp);
@@ -93,10 +129,13 @@ test("the installed Linux manager preserves local edits and loads the pinned pol
     await rm(directory, { force: true, recursive: true, maxRetries: 3 });
   });
   store.recordTask(task);
-  installedMcp = createPraxisMcpServer({ store, grants: [{
+  store.recordSession(worker);
+  const grant = {
     principalId: "principal_installed_manager", tokenDigest: digest(localToken),
-    taskIds: [task.id], sessions: [], actionKinds: [],
-  }] });
+    taskIds: [task.id], sessions: [{ sessionId: worker.id, canReport: false }],
+    actionKinds: [...actionPrompts.values()].map(({ kind }) => kind),
+  };
+  installedMcp = createPraxisMcpServer({ store, grants: [grant] });
   const mcp = `http://127.0.0.1:${await start(installedMcp)}/mcp`;
 
   const runInstall = (...extra) => execute(process.execPath, [
@@ -122,8 +161,32 @@ test("the installed Linux manager preserves local edits and loads the pinned pol
   let described = false;
   const prompts = [];
   provider = await providerFixture((call) => {
+    const names = call.tools?.map(({ function: tool }) => tool?.name) ?? [];
+    if (!names.length) return reply("Fixture title");
+    const lastUser = call.messages.findLastIndex(({ role }) => role === "user");
+    const input = call.messages[lastUser]?.content;
+    if (input === workerPrompt) return { ...reply("Distinct worker output"), holdAfterMessage: holdWorker };
+
+    const recent = call.messages.slice(lastUser + 1).filter(({ role }) => role === "tool");
+    const invoke = (name, args) => names.includes(name)
+      ? toolReply(name, args)
+      : toolReply("tool_call", { calls: [{ name, arguments: args }] });
+    const action = actionPrompts.get(input);
+    if (action) {
+      if (recent.length) return reply(recent.some(({ content }) => JSON.stringify(content).includes("pending"))
+        ? "The scoped action request is pending review." : "The scoped action request was refused.");
+      return invoke("mcp__praxis__request_action", { ...action,
+        occurredAt: new Date().toISOString(), submissionId: "event_foreground_" + action.kind,
+      });
+    }
+    if (input === unknownPrompt) {
+      if (recent.length) return reply(recent.some(({ content }) => JSON.stringify(content).includes("forbidden"))
+        ? "The requested information is unavailable in my scope." : "The tool returned unexpected information.");
+      return invoke(schemas[0], { taskId: "task_unavailable" });
+    }
+
     prompts.push(call.messages.filter(({ role }) => role === "system").map(({ content }) => content).join("\n"));
-    for (const result of call.messages.filter(({ role }) => role === "tool")) {
+    for (const result of recent) {
       if (JSON.stringify(result.content).includes(task.title)) sawTask = true;
       try {
         const value = JSON.parse(result.content);
@@ -132,8 +195,7 @@ test("the installed Linux manager preserves local edits and loads the pinned pol
         // Other tool result formats remain covered by the authenticated task assertion.
       }
     }
-    if (sawTask) return reply(finalReply);
-    const names = call.tools?.map(({ function: tool }) => tool?.name) ?? [];
+    if (sawTask) return { ...reply(finalReply), holdAfterMessage: holdForeground };
     if (schemas.every((name) => names.includes(name))) sawSchemas = true;
     if (!described && !sawSchemas && names.includes("tool_describe")) {
       described = true;
@@ -214,18 +276,40 @@ test("the installed Linux manager preserves local edits and loads the pinned pol
       return false;
     }
   }, "The installed Hermes manager did not open its native route");
-  const assignment = await runtime.submitTurn({
-    schemaVersion: 1, taskId: task.id, id: "session_install_test",
-  }, "Read the fixture task using Praxis MCP.", "installed-manager");
-  const result = await until(async () => {
-    const snapshot = await runtime.inspectAssignment(assignment);
-    assert.notEqual(snapshot.status, "failed");
-    return snapshot.status === "completed" ? snapshot : false;
-  }, "The installed Hermes manager did not finish its native turn");
-  assert.equal(result.output.text, finalReply);
+  const workerAssignment = await runtime.createAssignment(worker, workerPrompt);
+  await until(async () => (await runtime.inspectAssignment(workerAssignment)).status === "running",
+    "The independent worker did not start");
+  const authority = join(directory, "authority.json");
+  await writeFile(authority, JSON.stringify({ schemaVersion: 1, database: join(directory, "state.sqlite"), grants: [{
+    ...grant, sessions: [{ ...grant.sessions[0], assignment: workerAssignment }],
+  }] }), { mode: 0o600 });
+  const operator = randomBytes(32).toString("base64url");
+  shell = await startShell(directory, {
+    PRAXIS_MCP_CONFIG_FILE: authority, PRAXIS_OPERATOR_TOKEN_DIGEST: digest(operator),
+    PRAXIS_HERMES_ORIGIN: base, PRAXIS_HERMES_API_KEY: managerKey,
+  });
+  const privateCall = (path, payload) => fetch(new URL(path, shell.origin), {
+    method: payload === undefined ? "GET" : "POST",
+    headers: { Authorization: `Bearer ${operator}`, Origin: new URL(shell.origin).origin, "Content-Type": "application/json" },
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const requestTurn = (turnId, prompt) => privateCall("/api/manager/turn", { turnId, prompt });
+  let sawLiveForeground = false;
+  const result = await readTurn(await requestTurn("installed-manager", "Read the fixture task using Praxis MCP."), async (record) => {
+    if (record.snapshot.status === "running" && record.snapshot.output.text?.includes(finalReply)) {
+      sawLiveForeground = true;
+      assert.equal((await runtime.inspectAssignment(workerAssignment)).status, "running");
+      releaseForeground();
+    }
+  });
+  assert.equal(sawLiveForeground, true);
+  assert.equal(result.snapshot.sessionId, "session_foreground_manager");
+  assert.notEqual(result.runId, workerAssignment.runId);
+  assert.equal(result.snapshot.output.text, finalReply);
   assert.equal(sawSchemas, true);
   assert.equal(sawTask, true);
-  const receipt = await fetch(`${base}/v1/runs/${assignment.runId}`, {
+  const receipt = await fetch(`${base}/v1/runs/${result.runId}`, {
     headers: { Authorization: `Bearer ${managerKey}` }, redirect: "error",
   });
   assert.equal(receipt.status, 200);
@@ -234,5 +318,33 @@ test("the installed Linux manager preserves local edits and loads the pinned pol
   assert.ok(prompts.some((prompt) => observedPolicy(prompt) === `Axiom policy digest ${setup.policy.digest}\n\n${core}`));
   assert.ok(prompts.some((prompt) => skills.every((name) => prompt.includes("axiom:" + name))));
   assert.ok(prompts.some((prompt) => prompt.includes("Installed manager owner customization.")));
-  t.diagnostic("Native setup and its explicit update preserved user files. The running profile loaded the exact Axiom core and used scoped Praxis MCP.");
+  const missing = await readTurn(await requestTurn("missing", unknownPrompt));
+  assert.equal(missing.snapshot.output.text, "The requested information is unavailable in my scope.");
+
+  for (const [index, prompt] of [...actionPrompts.keys()].entries()) {
+    const response = await readTurn(await requestTurn("action-" + index, prompt));
+    assert.equal(response.snapshot.output.text, "The scoped action request is pending review.");
+  }
+  assert.equal((await runtime.inspectAssignment(workerAssignment)).status, "running");
+  const activity = await (await privateCall("/api/activity")).json();
+  assert.equal(activity.length, 3);
+  for (const [kind, entry] of activity.map((item) => [item.action.kind, item])) {
+    const request = await (await privateCall("/api/activity/inspect", { requestId: entry.requestId })).json();
+    assert.equal(entry.actorId, grant.principalId);
+    assert.deepEqual(entry.action.target, [...actionPrompts.values()].find((action) => action.kind === kind).target);
+    if (kind !== "session.stop") {
+      assert.equal(request.state, "refused");
+      continue;
+    }
+    assert.equal(request.state, "attention");
+    const approved = await privateCall("/api/activity/decision", {
+      requestId: entry.requestId, approvalId: request.approval.id, decision: "approve",
+    });
+    assert.equal(approved.status, 200);
+    assert.equal((await approved.json()).state, "resolved");
+  }
+  releaseWorker();
+  await until(async () => (await runtime.inspectAssignment(workerAssignment)).status === "stopped",
+    "The approved cancellation did not stop the exact worker");
+  t.diagnostic("The installed profile streamed a grounded answer before a separate worker finished, showed missing scope, and used the existing activity path for scoped actions.");
 });
