@@ -72,7 +72,8 @@ export class ManagementService {
   async #readGrant(): Promise<McpGrant> {
     const grant = await this.#options.loadGrant();
     if (grant.principalId !== this.#options.principalId || grant.actionKinds.length > 0
-      || grant.sessions.some(({ canReport }) => canReport)) {
+      || grant.sessions.some(({ canReport }) => canReport)
+      || grant.memoryProjects?.some(({ canWrite }) => canWrite)) {
       throw new Error("Background coordination requires its configured read-only MCP principal.");
     }
     this.#options.store.management.bindScope(JSON.stringify([this.#options.profile, grant.principalId]));

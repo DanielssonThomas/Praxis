@@ -1,6 +1,6 @@
 # Background management
 
-Praxis schedules background management in an independent local process while Hermes runs the manager turns. Use a separate named Hermes profile configured with a dedicated read-only Praxis MCP principal. Give that principal only the task and session IDs it needs. Set `actionKinds` to an empty array and `canReport` to false on its session grants. Start MCP with that grant already in place, and give the native background profile only its matching MCP credential. The worker returns advisory text. The operator continues to use the ordinary activity and approval paths for scoped actions. [Hermes profile setup](hermes-manager.md) · [MCP authority](mcp.md)
+Praxis schedules background management in an independent local process while Hermes runs the manager turns. Use a separate named Hermes profile configured with a dedicated read-only Praxis MCP principal. Give that principal only the task and session IDs it needs. Set `actionKinds` to an empty array and `canReport` to false on its session grants. Set `canWrite` to false on any memory project grants. Start MCP with that grant already in place, and give the native background profile only its matching MCP credential. The worker returns advisory text. The operator continues to use the ordinary activity and approval paths for scoped actions. [Hermes profile setup](hermes-manager.md) · [MCP authority](mcp.md)
 
 ## Run the queue
 

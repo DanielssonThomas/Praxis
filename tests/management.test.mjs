@@ -157,3 +157,17 @@ test("an uncertain active outcome holds its slot and does not start routine work
   assert.deepEqual(a.management.list().map(({ state }) => state), ["held", "queued"]);
   assert.equal(a.eventsOfKind("management.escalated").length, 1);
 });
+
+test("the background role refuses memory writes while preserving a read-only memory grant", async (t) => {
+  const { a } = await fixture(t);
+  const { ManagementService } = await import("@praxis/management");
+  const current = { ...grant, memoryProjects: [{ projectId: "fixture", canWrite: true }] };
+  const service = new ManagementService({
+    store: a, runtime: fake(), profile: "native-background", principalId: grant.principalId,
+    loadGrant: async () => current, concurrency: 1, maxAttempts: 1,
+  });
+  await assert.rejects(service.enqueue(item("memory", "direction")), /read-only MCP principal/);
+  assert.deepEqual(a.management.list(), []);
+  current.memoryProjects[0].canWrite = false;
+  assert.equal(await service.enqueue(item("memory", "direction")), "inserted");
+});
