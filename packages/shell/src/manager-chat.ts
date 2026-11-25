@@ -1,7 +1,9 @@
 import type { RuntimeSessionSnapshot, Usage } from "@praxis/contracts";
+import { insertManagerCards } from "./manager-cards.js";
+import type { ManagerResource } from "./manager-resources.js";
 
 type ManagerRecord =
-  | { kind: "snapshot"; snapshot: RuntimeSessionSnapshot; usage: Usage }
+  | { kind: "snapshot"; snapshot: RuntimeSessionSnapshot; usage: Usage; resources?: ManagerResource[] }
   | { kind: "error"; message: string };
 
 interface Turn {
@@ -56,6 +58,7 @@ function showSnapshot(turn: Turn, record: Extract<ManagerRecord, { kind: "snapsh
   if (output.availability === "available") {
     turn.response.textContent = output.truncated ? `Earlier output omitted.\n${output.text}` : output.text;
   }
+  if (record.resources) insertManagerCards(turn.response, record.resources);
   if (record.usage.metering === "reported") {
     const { inputTokens, outputTokens } = record.usage;
     const counts = [

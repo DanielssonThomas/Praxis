@@ -9,6 +9,8 @@ import { HermesRuntime, HermesRuntimeError } from "@praxis/hermes-runtime";
 import type { HermesAssignment, HermesOutputCursor } from "@praxis/hermes-runtime";
 import { readSettings } from "@praxis/settings";
 import { z } from "zod";
+import { splitManagerReferences, unavailableManagerResources } from "./manager-resources.js";
+import type { ReadManagerResources } from "./manager-resources.js";
 
 const route = "/api/manager/turn";
 const foregroundSession = sessionSchema.parse({
@@ -24,7 +26,7 @@ function sendError(response: ServerResponse, status: number, error: string): voi
   response.end(JSON.stringify({ error }));
 }
 
-async function streamTurn(response: ServerResponse, runtime: HermesRuntime, assignment: HermesAssignment): Promise<void> {
+async function streamTurn(response: ServerResponse, runtime: HermesRuntime, assignment: HermesAssignment, readResources: ReadManagerResources): Promise<void> {
   const controller = new AbortController();
   const disconnect = () => controller.abort();
   response.once("close", disconnect);
@@ -38,8 +40,18 @@ async function streamTurn(response: ServerResponse, runtime: HermesRuntime, assi
       const current = await runtime.inspectLiveAssignment(assignment, cursor);
       if (controller.signal.aborted) return;
       cursor = current.cursor;
+      let { snapshot } = current;
+      let resources;
+      if (snapshot.output.availability === "available") {
+        const { text, references } = splitManagerReferences(snapshot.output.text);
+        snapshot = { ...snapshot, output: { ...snapshot.output, text } };
+        if (snapshot.status === "completed" && !snapshot.output.truncated && references.length > 0) {
+          resources = await readResources(references);
+        }
+      }
+      if (controller.signal.aborted) return;
       const record = JSON.stringify({
-        kind: "snapshot", runId: assignment.runId, snapshot: current.snapshot, usage: current.usage,
+        kind: "snapshot", runId: assignment.runId, snapshot, usage: current.usage, resources,
       });
       if (record !== previous) {
         if (!response.write(record + "\n")) await once(response, "drain", { signal: controller.signal });
@@ -58,7 +70,7 @@ async function streamTurn(response: ServerResponse, runtime: HermesRuntime, assi
   }
 }
 
-export async function managerForegroundFromEnv(settingsFile: string) {
+export async function managerForegroundFromEnv(settingsFile: string, readManagerResources?: ReadManagerResources) {
   const origin = process.env.PRAXIS_HERMES_ORIGIN;
   const apiKey = process.env.PRAXIS_HERMES_API_KEY;
   const digest = process.env.PRAXIS_OPERATOR_TOKEN_DIGEST;
@@ -72,6 +84,12 @@ export async function managerForegroundFromEnv(settingsFile: string) {
       runtime = new HermesRuntime({ origin, apiKey });
     }
   }
+  const readResources: ReadManagerResources = async (references) => {
+    const settings = await readSettings(settingsFile).catch(() => undefined);
+    if (!settings?.display.autoPresent) return [];
+    const unavailable = unavailableManagerResources(references);
+    return readManagerResources === undefined ? unavailable : readManagerResources(references).catch(() => unavailable);
+  };
 
   const serve = async (request: IncomingMessage, response: ServerResponse): Promise<boolean> => {
     if (request.url !== route) return false;
@@ -112,7 +130,7 @@ export async function managerForegroundFromEnv(settingsFile: string) {
       }
       return true;
     }
-    if (!response.destroyed) await streamTurn(response, runtime, assignment);
+    if (!response.destroyed) await streamTurn(response, runtime, assignment, readResources);
     return true;
   };
   return { available: runtime !== undefined, serve };

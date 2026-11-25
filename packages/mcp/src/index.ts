@@ -115,33 +115,37 @@ const submission = {
   occurredAt: eventSchema.shape.occurredAt,
 };
 
+export function inspectScopedTask(store: OperationalStore, grant: McpGrant, taskId: TaskId) {
+  permitTask(grant, taskId);
+  return required(store.getTask(taskId));
+}
+
+export async function inspectScopedWorker({ store, runtime }: Pick<Options, "store" | "runtime">, grant: McpGrant, sessionId: SessionId) {
+  const { assignment } = permitSession(grant, sessionId);
+  const session = required(store.getSession(sessionId));
+  if (assignment === undefined) return { session, runtime: { availability: "unavailable" as const, reason: "No native assignment is bound to this session." } };
+  if (runtime === undefined) return { session, runtime: { availability: "unavailable" as const, reason: "No native runtime is configured." } };
+  if (assignment.taskId !== session.taskId) throw new ToolError("forbidden", "The native assignment is outside the session's scope.");
+  const snapshot = runtimeSessionSnapshotSchema.parse(await runtime.inspectAssignment(assignment));
+  if (snapshot.sessionId !== session.id || snapshot.taskId !== session.taskId) {
+    throw new ToolError("forbidden", "The native snapshot is outside the session's scope.");
+  }
+  return { session, runtime: { availability: "available" as const, snapshot } };
+}
+
 function makeMcp({ store, runtime }: Options, grant: Grant): McpServer {
   const mcp = new McpServer({ name: "praxis", version: "1.0.0" });
   mcp.registerTool("inspect_task", {
     description: "Read a task in the authenticated principal's scope.",
     inputSchema: z.strictObject({ taskId: taskIdSchema }),
     annotations: { readOnlyHint: true },
-  }, ({ taskId }) => answer(() => {
-    permitTask(grant, taskId);
-    return { task: required(store.getTask(taskId)) };
-  }));
+  }, ({ taskId }) => answer(() => ({ task: inspectScopedTask(store, grant, taskId) })));
 
   mcp.registerTool("inspect_worker", {
     description: "Read a scoped worker session and its native runtime snapshot when available.",
     inputSchema: z.strictObject({ sessionId: sessionIdSchema }),
     annotations: { readOnlyHint: true },
-  }, ({ sessionId }) => answer(async () => {
-    const { assignment } = permitSession(grant, sessionId);
-    const session = required(store.getSession(sessionId));
-    if (assignment === undefined) return { session, runtime: { availability: "unavailable", reason: "No native assignment is bound to this session." } };
-    if (runtime === undefined) return { session, runtime: { availability: "unavailable", reason: "No native runtime is configured." } };
-    if (assignment.taskId !== session.taskId) throw new ToolError("forbidden", "The native assignment is outside the session's scope.");
-    const snapshot = runtimeSessionSnapshotSchema.parse(await runtime.inspectAssignment(assignment));
-    if (snapshot.sessionId !== session.id || snapshot.taskId !== session.taskId) {
-      throw new ToolError("forbidden", "The native snapshot is outside the session's scope.");
-    }
-    return { session, runtime: { availability: "available", snapshot } };
-  }));
+  }, ({ sessionId }) => answer(() => inspectScopedWorker({ store, runtime }, grant, sessionId)));
 
   mcp.registerTool("report_worker", {
     description: "Record progress, a result or a blocker for a worker session authorized to report.",

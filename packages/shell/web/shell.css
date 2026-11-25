@@ -207,3 +207,9 @@ button[type="submit"] { background: var(--accent); color: var(--button-text); bo
 #manager-transcript { display: grid; gap: 0.65rem; list-style: none; padding: 0; margin-block: 0.8rem; }
 .manager-message { background: var(--panel); border: 1px solid var(--border); border-radius: 0.55rem; padding: 0.65rem 0.85rem; }
 .manager-message p { margin-block: 0.2rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.manager-cards { display: grid; gap: 0.45rem; inline-size: min(100%, 22rem); margin: 0.65rem 0 0 auto; }
+.manager-cards article { display: grid; gap: 0.35rem; background: var(--surface); }
+.manager-cards .kanban-card + .kanban-card { margin-block-start: 0; }
+.manager-cards h3 { margin: 0; font-size: 0.95rem; overflow-wrap: anywhere; }
+.manager-cards summary { cursor: pointer; color: var(--accent); }
+.manager-cards button { justify-self: start; }

@@ -308,3 +308,49 @@ test("Manager sends plain text and reconnects the same turn after unblocking nav
   assert.equal(await page.evaluate((value) => [JSON.stringify(localStorage), JSON.stringify(sessionStorage)]
     .some((storage) => storage.includes(value)), bearer), false);
 });
+
+test("Manager displays authoritative resource cards and lets the operator expand and dismiss them", async (t) => {
+  const page = await browser.newPage({ viewport: { width: 360, height: 620 } });
+  page.setDefaultTimeout(3_000);
+  t.after(() => page.close());
+  await page.route(address, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      response, body: (await response.text()).replace('data-manager="unavailable"', 'data-manager="available"'),
+    });
+  });
+  await page.route("**/api/manager/turn", async (route) => {
+    if (route.request().method() === "HEAD") {
+      await route.fulfill({ status: 204 });
+      return;
+    }
+    await route.fulfill({ contentType: "application/x-ndjson", body: JSON.stringify({
+      kind: "snapshot", snapshot: { status: "completed", output: { availability: "available", text: "Here is the work.", truncated: false } },
+      usage: { metering: "unknown" },
+      resources: [
+        { kind: "task", task: { schemaVersion: 1, id: "task_card", title: "Authoritative browser task" } },
+        { kind: "session", session: { schemaVersion: 1, id: "session_card", taskId: "task_card" }, status: "running" },
+        { kind: "unavailable", resource: "task" },
+      ],
+    }) + "\n" });
+  });
+  await page.goto(address);
+  await page.getByRole("form", { name: "Open Manager" }).getByLabel("Operator token").fill("fixture-browser-operator");
+  await page.getByRole("button", { name: "Open manager", exact: true }).click();
+  await page.getByRole("button", { name: "Lock manager", exact: true }).waitFor();
+  await command(page, "Show the work.");
+  await page.getByText("Here is the work.", { exact: true }).waitFor();
+
+  const task = page.getByRole("article", { name: "Authoritative browser task" });
+  await task.waitFor();
+  assert.equal(await task.getByText("task_card", { exact: true }).isVisible(), false);
+  await task.getByText("Details", { exact: true }).click();
+  await task.getByText("task_card", { exact: true }).waitFor();
+  const worker = page.getByRole("article", { name: "Worker session" });
+  await worker.getByText("running", { exact: true }).waitFor();
+  const unavailable = page.getByText("Task unavailable", { exact: true });
+  await unavailable.waitFor();
+  await task.getByRole("button", { name: "Dismiss", exact: true }).click();
+  await task.waitFor({ state: "detached" });
+  await assertLayout(page);
+});
