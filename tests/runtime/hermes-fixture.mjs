@@ -45,7 +45,7 @@ export async function until(observe, description, timeout = 25_000) {
   assert.fail(description);
 }
 
-async function providerFixture(respond) {
+export async function providerFixture(respond) {
   const server = createServer(async (request, response) => {
     if (request.method === "GET" && request.url === "/v1/models") {
       response.writeHead(200, { "Content-Type": "application/json" });
