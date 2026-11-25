@@ -194,6 +194,23 @@ test("two MCP processes serialize valid writes and keep retries idempotent", { t
   assert.equal(await readFile(candidate, "utf8"), "Private external file");
 });
 
+test("memory acknowledges a published note while another process has a SQLite read transaction", { timeout: 10_000 }, async (t) => {
+  const fixture = await setup(t);
+  const client = await (await fixture.start()).connect();
+  assert.equal((await tool(client, "record_memory", decision)).write, "inserted");
+
+  const reader = new DatabaseSync(join(fixture.vault, ".praxis-memory.lock"));
+  try {
+    reader.exec("BEGIN");
+    reader.prepare("SELECT name FROM sqlite_schema").all();
+    const saved = await tool(client, "record_memory", finding);
+    const markdown = await readFile(join(fixture.vault, projectId, finding.noteId + ".md"), "utf8");
+    assert.ok(markdown.includes(finding.body));
+    assert.equal(saved.write, "inserted");
+    assert.equal((await tool(client, "record_memory", finding)).write, "duplicate");
+  } finally { reader.close(); }
+});
+
 test("memory is opt-in and leaves ordinary MCP tools available", { timeout: 10_000 }, async (t) => {
   const fixture = await setup(t, false);
   const server = await fixture.start();
