@@ -343,6 +343,21 @@ test("the installed Linux manager loads its policy and responds while an indepen
 
   await page.getByRole("button", { name: "Lock manager", exact: true }).click();
   await openManager();
+  // Clone at the browser's fetch boundary before either reader starts consuming the replay stream.
+  const replay = await page.evaluateHandle(() => {
+    const originalFetch = window.fetch;
+    const body = new Promise((resolve, reject) => {
+      window.fetch = (url, options) => {
+        const response = originalFetch.call(window, url, options);
+        if (url === "/api/manager/turn" && options?.method === "POST") {
+          window.fetch = originalFetch;
+          void response.then((value) => value.clone().text()).then(resolve, reject);
+        }
+        return response;
+      };
+    });
+    return { body };
+  });
   const resumed = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/manager/turn"
     && response.request().method() === "POST");
   const beforeReconnect = prompts.length;
@@ -350,7 +365,8 @@ test("the installed Linux manager loads its policy and responds while an indepen
   const replayResponse = await resumed;
   assert.equal(replayResponse.status(), 200);
   releaseForeground();
-  const records = (await replayResponse.text()).trim().split("\n").map(JSON.parse);
+  const records = (await replay.evaluate(({ body }) => body)).trim().split("\n").map(JSON.parse);
+  await replay.dispose();
   const result = records.at(-1);
   assert.equal(result.snapshot.status, "completed");
   await page.locator("#manager-status").waitFor({ state: "hidden" });
