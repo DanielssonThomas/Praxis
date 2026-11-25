@@ -70,6 +70,11 @@ test("the local manager route authenticates the operator and only submits the fi
       body: JSON.stringify(body),
     },
   );
+  const auth = (token) => fetch(new URL("/api/manager/turn", shell.origin), {
+    method: "HEAD", headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal((await auth("fixture-mcp-only")).status, 401);
+  assert.equal((await auth(operator)).status, 204);
   const turn = { turnId: "first-message", prompt: "Read the current task." };
   assert.equal((await submit(turn, "fixture-mcp-only")).status, 401);
   assert.equal((await submit(turn, operator, "http://example.invalid")).status, 403);

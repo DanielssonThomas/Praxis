@@ -23,6 +23,7 @@ const reports = await reportsRoutesFromEnv(config);
 const assets = new Map([
   ["/", { url: new URL("../web/index.html", import.meta.url), type: "text/html; charset=utf-8" }],
   ["/assets/shell.css", { url: new URL("../web/shell.css", import.meta.url), type: "text/css; charset=utf-8" }],
+  ["/assets/manager-chat.js", { url: new URL("./manager-chat.js", import.meta.url), type: "text/javascript; charset=utf-8" }],
   ["/assets/shell.js", { url: new URL("./browser.js", import.meta.url), type: "text/javascript; charset=utf-8" }],
   ["/assets/activity.js", { url: new URL("./activity.js", import.meta.url), type: "text/javascript; charset=utf-8" }],
   ["/assets/kanban.js", { url: new URL("./kanban.js", import.meta.url), type: "text/javascript; charset=utf-8" }],
@@ -39,7 +40,7 @@ async function serve(request: IncomingMessage, response: ServerResponse): Promis
   if (await activity?.serve(request, response)) return;
   if (await kanban?.serve(request, response)) return;
   if (await overview?.serve(request, response)) return;
-  if (await managerForeground(request, response)) return;
+  if (await managerForeground.serve(request, response)) return;
   if (await reports?.serve(request, response)) return;
   const path = request.url?.split("?")[0] ?? "";
   const asset = assets.get(path);
@@ -54,6 +55,7 @@ async function serve(request: IncomingMessage, response: ServerResponse): Promis
   const body = await readFile(asset.url);
   const payload = path === "/"
     ? body.toString("utf8")
+      .replace('data-manager="unavailable"', `data-manager="${managerForeground.available ? "available" : "unavailable"}"`)
       .replace('data-activity="unavailable"', `data-activity="${activity === undefined ? "unavailable" : "available"}"`)
       .replace('data-kanban="unavailable"', `data-kanban="${kanban === undefined ? "unavailable" : "available"}"`)
       .replace('data-overview="unavailable"', `data-overview="${overview === undefined ? "unavailable" : "available"}"`)
