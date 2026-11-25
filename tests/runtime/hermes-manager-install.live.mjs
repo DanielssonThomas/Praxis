@@ -13,6 +13,7 @@ import { HermesRuntime } from "@praxis/hermes-runtime";
 import { createPraxisMcpServer } from "@praxis/mcp";
 import { defaultSettings } from "@praxis/settings";
 import { OperationalStore } from "@praxis/state";
+import { chromium } from "playwright";
 import { providerFixture, startShell, stopProcess, until } from "./hermes-fixture.mjs";
 
 const execute = promisify(execFile);
@@ -50,7 +51,7 @@ async function close(server) {
   await new Promise((resolve) => server.close(resolve));
 }
 
-async function readTurn(response, onRecord = () => {}) {
+async function readTurn(response) {
   assert.equal(response.status, 200);
   const decoded = response.body.pipeThrough(new TextDecoderStream());
   const records = [];
@@ -62,7 +63,6 @@ async function readTurn(response, onRecord = () => {}) {
       const record = JSON.parse(line);
       assert.equal(record.kind, "snapshot");
       records.push(record);
-      await onRecord(record);
     }
   }
   assert.equal(partial, "");
@@ -111,6 +111,7 @@ test("the installed Linux manager loads its policy and responds while an indepen
 
   let gateway;
   let shell;
+  let browser;
   let releaseWorker;
   let releaseForeground;
   const holdWorker = new Promise((resolve) => { releaseWorker = resolve; });
@@ -121,6 +122,7 @@ test("the installed Linux manager loads its policy and responds while an indepen
   t.after(async () => {
     releaseWorker();
     releaseForeground();
+    await browser?.close();
     await stopProcess(shell?.processHandle);
     await stopProcess(gateway);
     await provider?.close();
@@ -295,15 +297,57 @@ test("the installed Linux manager loads its policy and responds while an indepen
     signal: AbortSignal.timeout(20_000),
   });
   const requestTurn = (turnId, prompt) => privateCall("/api/manager/turn", { turnId, prompt });
-  let sawLiveForeground = false;
-  const result = await readTurn(await requestTurn("installed-manager", "Read the fixture task using Praxis MCP."), async (record) => {
-    if (record.snapshot.status === "running" && record.snapshot.output.text?.includes(finalReply)) {
-      sawLiveForeground = true;
-      assert.equal((await runtime.inspectAssignment(workerAssignment)).status, "running");
-      releaseForeground();
+  browser = await chromium.launch({ executablePath: process.env.PRAXIS_TEST_CHROMIUM });
+  const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+  page.setDefaultTimeout(12_000);
+  const submissions = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/manager/turn" && request.method() === "POST") {
+      submissions.push(request.postDataJSON());
     }
   });
-  assert.equal(sawLiveForeground, true);
+  await page.goto(shell.origin);
+  async function openManager() {
+    await page.getByRole("form", { name: "Open Manager" }).getByLabel("Operator token").fill(operator);
+    await page.getByRole("button", { name: "Open manager", exact: true }).click();
+    await page.getByRole("button", { name: "Lock manager", exact: true }).waitFor();
+  }
+  async function command(text) {
+    const input = page.getByRole("textbox", { name: "Command", exact: true });
+    await input.fill(text);
+    await input.press("Enter");
+  }
+  await openManager();
+  const firstPrompt = "Read the fixture task using Praxis MCP.";
+  await command(firstPrompt);
+  await page.getByText(finalReply, { exact: true }).waitFor();
+  assert.equal((await runtime.inspectAssignment(workerAssignment)).status, "running");
+  await command("/o");
+  await page.getByRole("heading", { name: "Overview", exact: true }).waitFor();
+  await command("/m");
+  await page.getByRole("heading", { name: "Manager", exact: true }).waitFor();
+  await page.getByText(finalReply, { exact: true }).waitFor();
+
+  await page.getByRole("button", { name: "Lock manager", exact: true }).click();
+  await openManager();
+  const resumed = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/manager/turn"
+    && response.request().method() === "POST");
+  const beforeReconnect = prompts.length;
+  await page.getByRole("button", { name: "Reconnect", exact: true }).click();
+  const replayResponse = await resumed;
+  assert.equal(replayResponse.status(), 200);
+  releaseForeground();
+  const records = (await replayResponse.text()).trim().split("\n").map(JSON.parse);
+  const result = records.at(-1);
+  assert.equal(result.snapshot.status, "completed");
+  await page.locator("#manager-status").waitFor({ state: "hidden" });
+  await page.getByText(/Context window and compaction unavailable/).waitFor();
+  await page.getByText(/input · .*output tokens/).waitFor();
+  assert.equal(submissions.length, 2);
+  assert.deepEqual(submissions[0], submissions[1]);
+  assert.equal(submissions[0].prompt, firstPrompt);
+  assert.equal(prompts.length, beforeReconnect);
+  assert.equal(await page.getByText(firstPrompt, { exact: true }).count(), 1);
   assert.equal(result.snapshot.sessionId, "session_foreground_manager");
   assert.notEqual(result.runId, workerAssignment.runId);
   assert.equal(result.snapshot.output.text, finalReply);
@@ -346,5 +390,5 @@ test("the installed Linux manager loads its policy and responds while an indepen
   releaseWorker();
   await until(async () => (await runtime.inspectAssignment(workerAssignment)).status === "stopped",
     "The approved cancellation did not stop the exact worker");
-  t.diagnostic("The installed profile streamed a grounded answer before a separate worker finished, showed missing scope, and used the existing activity path for scoped actions.");
+  t.diagnostic("Chromium received grounded output during another native run, navigated locally, and recovered the same turn after lock/reopen. Missing scope and scoped Activity are explicit.");
 });

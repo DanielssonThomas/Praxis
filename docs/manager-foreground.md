@@ -2,9 +2,15 @@
 
 The local Praxis host streams a dedicated conversation with the selected [named Hermes manager](hermes-manager.md). Configure the manager's named `PRAXIS_HERMES_ORIGIN`, its local `PRAXIS_HERMES_API_KEY`, and the existing [operator token and MCP authority](approvals.md). The configured Hermes profile must match `manager.profile` in portable settings. Restart the shell after changing the configuration.
 
+## Use the Manager view
+
+Open **Manager**, enter the local operator token, and type a message in the permanent command bar. Slash commands still navigate the shell while a reply streams. If a connection drops or you lock the Manager, open it again and choose **Reconnect** to resume the current turn. The open tab retains its conversation across view changes and stream reconnects. The operator token stays in memory and is cleared on lock or reload.
+
+Hermes reports tokens for an individual turn when available. The Manager shows those separately and marks the context window and compaction as unavailable.
+
 ## Submit and receive output
 
-Send `POST /api/manager/turn` with the local shell's exact origin, the operator bearer in `Authorization`, and `Content-Type: application/json`. A caller provides a stable turn ID and the prompt.
+Use an authenticated `HEAD /api/manager/turn` to check operator access. The valid setup responds with 204 and performs no native operation. Send `POST /api/manager/turn` with the local shell's exact origin, the operator bearer in `Authorization`, and `Content-Type: application/json`. A caller provides a stable turn ID and the prompt.
 
 ```json
 {
@@ -25,4 +31,4 @@ A granted cancel intent records `session.stop` in Activity. The operator must ap
 
 ## Verify
 
-The [native manager fixture](hermes-manager.md#verify-the-setup) exercises the installed manager, its local private stream, a read through real Hermes MCP, and a separate running Hermes worker. It observes foreground output before worker completion, scoped action recording, and the exact approved worker stop. Its provider is scripted on localhost.
+The [native manager fixture](hermes-manager.md#verify-the-setup) exercises the installed manager, its private stream in Chromium, a read through real Hermes MCP, and a separate running Hermes worker. It observes foreground output before worker completion, navigation and stable-ID reconnect, scoped action recording, and the exact approved worker stop. Its provider is scripted on localhost.
