@@ -11,7 +11,7 @@
   <script type="module" src="/assets/overview.js"></script>
   <script type="module" src="/assets/reports.js"></script>
 </head>
-<body data-activity="unavailable" data-kanban="unavailable" data-overview="unavailable" data-reports="unavailable">
+<body data-manager="unavailable" data-activity="unavailable" data-kanban="unavailable" data-overview="unavailable" data-reports="unavailable">
   <header id="shell-header">
     <div class="header-row">
       <span class="brand">Praxis</span>
@@ -30,7 +30,21 @@
   </header>
   <main id="workspace">
     <section class="view" data-view="manager" aria-labelledby="manager-title">
-      <h1 id="manager-title">Manager</h1>
+      <div class="manager-heading">
+        <h1 id="manager-title">Manager</h1>
+        <button id="manager-lock" type="button" hidden>Lock manager</button>
+      </div>
+      <form id="manager-auth" aria-label="Open Manager" autocomplete="off" hidden>
+        <label>Operator token <input type="password" name="operatorToken" required></label>
+        <button type="submit">Open manager</button>
+      </form>
+      <p id="manager-status" role="status">Configure the local Hermes manager connection.</p>
+      <div id="manager-conversation" hidden>
+        <p class="manager-context">Context window and compaction unavailable</p>
+        <p id="manager-usage" class="manager-context" hidden></p>
+        <ol id="manager-transcript" role="log" aria-label="Manager conversation"></ol>
+        <button id="manager-reconnect" type="button" hidden>Reconnect</button>
+      </div>
     </section>
     <section class="view overview-view" data-view="overview" aria-labelledby="overview-title" hidden>
       <div class="overview-heading">

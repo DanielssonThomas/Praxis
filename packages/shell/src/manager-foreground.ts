@@ -73,7 +73,7 @@ export async function managerForegroundFromEnv(settingsFile: string) {
     }
   }
 
-  return async (request: IncomingMessage, response: ServerResponse): Promise<boolean> => {
+  const serve = async (request: IncomingMessage, response: ServerResponse): Promise<boolean> => {
     if (request.url !== route) return false;
     if (!runtime || !guard) {
       sendError(response, 503, "Configure the local operator and named Hermes manager.");
@@ -84,8 +84,12 @@ export async function managerForegroundFromEnv(settingsFile: string) {
       sendError(response, denied.status, denied.error);
       return true;
     }
+    if (request.method === "HEAD") {
+      response.writeHead(204, { "Cache-Control": "no-store" }).end();
+      return true;
+    }
     if (request.method !== "POST") {
-      response.setHeader("Allow", "POST");
+      response.setHeader("Allow", "HEAD, POST");
       sendError(response, 405, "Submit a foreground turn with POST.");
       return true;
     }
@@ -111,4 +115,5 @@ export async function managerForegroundFromEnv(settingsFile: string) {
     if (!response.destroyed) await streamTurn(response, runtime, assignment);
     return true;
   };
+  return { available: runtime !== undefined, serve };
 }

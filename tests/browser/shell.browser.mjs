@@ -257,3 +257,54 @@ test("local reports filter the active Chart.js view, preserve preferences and cl
   await page.getByText("Report collection is paused.", { exact: false }).waitFor();
   await assertLayout(page);
 });
+
+test("Manager sends plain text and reconnects the same turn after unblocking navigation", async (t) => {
+  const page = await browser.newPage({ viewport: { width: 960, height: 720 } });
+  t.after(() => page.close());
+  const requests = [];
+  const bearer = "fixture-browser-operator";
+  await page.route(address, async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace('data-manager="unavailable"', 'data-manager="available"');
+    await route.fulfill({ response, body });
+  });
+  await page.route("**/api/manager/turn", async (route) => {
+    const request = route.request();
+    assert.equal(request.headers().authorization, `Bearer ${bearer}`);
+    if (request.method() === "HEAD") {
+      await route.fulfill({ status: 204 });
+      return;
+    }
+    requests.push(request.postDataJSON());
+    const status = requests.length === 1 ? "running" : "completed";
+    const text = status === "running" ? "A partial manager reply" : "The complete manager reply.";
+    await route.fulfill({ contentType: "application/x-ndjson", body: JSON.stringify({
+      kind: "snapshot", runId: "run_browser_manager",
+      snapshot: { status, output: { availability: "available", text, truncated: false } },
+      usage: { metering: "reported", inputTokens: 8, outputTokens: 2 },
+    }) + "\n" });
+  });
+  await page.goto(address);
+  await page.getByRole("form", { name: "Open Manager" }).getByLabel("Operator token", { exact: true }).fill(bearer);
+  await page.getByRole("button", { name: "Open manager", exact: true }).click();
+  await page.getByRole("button", { name: "Lock manager", exact: true }).waitFor();
+  await command(page, "Keep Case in the prompt.");
+  await page.getByText("A partial manager reply", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Reconnect", exact: true }).waitFor();
+
+  await command(page, "/o");
+  await heading(page, "Overview");
+  await command(page, "/m");
+  await heading(page, "Manager");
+  await page.getByText("A partial manager reply", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Reconnect", exact: true }).click();
+  await page.getByText("The complete manager reply.", { exact: true }).waitFor();
+  await page.getByText(/window and compaction unavailable/).waitFor();
+  await page.getByText(/8 input · 2 output tokens/).waitFor();
+
+  assert.deepEqual(requests[0], requests[1]);
+  assert.equal(requests[0].prompt, "Keep Case in the prompt.");
+  assert.equal(await page.getByText("Keep Case in the prompt.", { exact: true }).count(), 1);
+  assert.equal(await page.evaluate((value) => [JSON.stringify(localStorage), JSON.stringify(sessionStorage)]
+    .some((storage) => storage.includes(value)), bearer), false);
+});

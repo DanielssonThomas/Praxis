@@ -1,3 +1,5 @@
+import { submitManagerPrompt } from "./manager-chat.js";
+
 const routes = {
   manager: { label: "Manager", short: "m" },
   overview: { label: "Overview", short: "o" },
@@ -75,6 +77,12 @@ form.addEventListener("submit", (event) => {
   event.preventDefault();
   const command = input.value.trim().toLowerCase();
   if (command === "") return;
+  if (current === "manager" && !command.startsWith("/")) {
+    const error = submitManagerPrompt(input.value);
+    if (error === undefined) input.value = "";
+    showFeedback(error ?? "");
+    return;
+  }
   if (command === "/help" || command === "/h") {
     input.value = "";
     showFeedback(helpEntries.join(" · "));
