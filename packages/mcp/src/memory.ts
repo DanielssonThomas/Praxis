@@ -259,9 +259,8 @@ export class ProjectMemory {
           await delay(25);
         }
       }
-      const result = operation(root);
-      lock.exec("COMMIT");
-      return result;
+      // Closing rolls back this lock-only transaction after the Markdown operation.
+      return operation(root);
     } finally { lock.close(); }
   }
 }
