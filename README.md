@@ -21,4 +21,6 @@ Read [contributor instructions](AGENTS.md) before working on an issue. See the [
 
 After building, run `npm start` and open the printed local URL. Open **Menu** to switch views, or run `/help` in the command bar. See [navigation and browser checks](docs/shell.md) and [portable settings](docs/settings.md).
 
+See the [Hermes manager setup](docs/hermes-manager.md) to install the named Linux manager profile and connect it to Praxis MCP.
+
 The local worker API can run direct Codex assignments on the pinned Linux host. [Direct Codex workers](docs/codex-worker.md)
