@@ -5,6 +5,7 @@ import { approvalRoutesFromEnv } from "@praxis/approvals/http";
 import { kanbanRoutesFromEnv } from "@praxis/kanban/http";
 import { settingsPath } from "@praxis/settings";
 import { serveSettings } from "@praxis/settings/http";
+import { managerForegroundFromEnv } from "./manager-foreground.js";
 import { overviewRoutesFromEnv } from "./overview-server.js";
 import { reportsRoutesFromEnv } from "./reports-server.js";
 
@@ -17,6 +18,7 @@ const config = settingsPath();
 const activity = await approvalRoutesFromEnv();
 const kanban = await kanbanRoutesFromEnv();
 const overview = await overviewRoutesFromEnv(activity?.list);
+const managerForeground = await managerForegroundFromEnv(config);
 const reports = await reportsRoutesFromEnv(config);
 const assets = new Map([
   ["/", { url: new URL("../web/index.html", import.meta.url), type: "text/html; charset=utf-8" }],
@@ -37,6 +39,7 @@ async function serve(request: IncomingMessage, response: ServerResponse): Promis
   if (await activity?.serve(request, response)) return;
   if (await kanban?.serve(request, response)) return;
   if (await overview?.serve(request, response)) return;
+  if (await managerForeground(request, response)) return;
   if (await reports?.serve(request, response)) return;
   const path = request.url?.split("?")[0] ?? "";
   const asset = assets.get(path);
