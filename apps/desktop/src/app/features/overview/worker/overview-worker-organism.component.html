@@ -23,9 +23,6 @@
     <section>
       <h3>Session details</h3>
       <dl>
-        @if (pane().ticket !== pane().task.id) {
-          <div><dt>Task</dt><dd class="identity">{{ pane().task.id }}</dd></div>
-        }
         <div><dt>Session</dt><dd class="identity">{{ pane().session.id }}</dd></div>
       </dl>
       <praxis-session-control [sessionId]="pane().session.id" [control]="pane().control" />

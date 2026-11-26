@@ -1,29 +1,8 @@
 import assert from "node:assert/strict";
-import { once } from "node:events";
-import { mkdir, readFile } from "node:fs/promises";
-import { createServer } from "node:http";
-import { extname, join } from "node:path";
-import { after, before, test } from "node:test";
-import { chromium } from "playwright";
+import { test } from "node:test";
+import { desktopBrowserSuite } from "../../shell/desktop-browser-fixture.mjs";
 
-const bundle = new URL("../../../../dist/browser/", import.meta.url);
-const contentTypes = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css" };
-const traces = process.env.PRAXIS_UI_EVIDENCE_DIR;
-const server = createServer(async (request, response) => {
-  const pathname = new URL(request.url, "http://127.0.0.1").pathname;
-  const file = pathname === "/" ? "index.html" : pathname.slice(1);
-  if (!/^[\w.-]+$/.test(file)) {
-    response.writeHead(404).end();
-    return;
-  }
-  try {
-    const body = await readFile(new URL(file, bundle));
-    response.writeHead(200, { "content-type": contentTypes[extname(file)] ?? "application/octet-stream" }).end(body);
-  } catch {
-    response.writeHead(404).end("Angular desktop build unavailable");
-  }
-});
-let browser;
+const { open, capture } = desktopBrowserSuite();
 
 const titles = [
   "Add catalog search filters", "Normalize warehouse API responses", "Cover checkout edge cases",
@@ -66,54 +45,37 @@ function projection(count) {
   return { panes, association: { available: true, reason: null } };
 }
 
-before(async () => {
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  browser = await chromium.launch({ executablePath: process.env.PRAXIS_TEST_CHROMIUM });
-  if (traces) await mkdir(traces, { recursive: true });
-  console.log("Overview bundle exercised in Chromium " + browser.version() + " on " + process.platform + " " + process.arch);
-});
-
-after(async () => {
-  await browser?.close();
-  server.close();
-});
-
-async function open(t, viewport, observation, count) {
-  const context = await browser.newContext({ viewport, locale: "en-US", colorScheme: "dark" });
-  if (traces) await context.tracing.start({ screenshots: true, snapshots: true });
-  t.after(async () => {
-    if (traces) await context.tracing.stop({ path: join(traces, observation + ".zip") });
-    await context.close();
-  });
-  await context.addInitScript(({ initial, readOnly }) => {
-    window.isTauri = true;
-    window.overviewFixture = { projection: initial, controls: [] };
-    window.__TAURI_INTERNALS__ = {
-      async invoke(command, args) {
-        const fixture = window.overviewFixture;
-        switch (command) {
-          case "host_status": return { stage: "ready", nodeVersion: "24.22.3" };
-          case "read_overview": return fixture.projection;
-          case "control_session": {
-            const request = args.request;
-            fixture.controls.push(request);
-            const pane = fixture.projection.panes.find((item) => item.session.id === request.sessionId);
-            if (request.operation !== "takeover" || !pane?.control.canTakeover) {
-              throw { code: "denied", message: "This fixture does not grant control." };
-            }
-            pane.control = { ...readOnly, mode: "manual", canGuide: true, canReturn: true };
-            return pane.control;
+function installFixture({ initial, readOnly }) {
+  window.isTauri = true;
+  window.overviewFixture = { projection: initial, controls: [] };
+  window.__TAURI_INTERNALS__ = {
+    async invoke(command, args) {
+      const fixture = window.overviewFixture;
+      switch (command) {
+        case "host_status": return { stage: "ready", nodeVersion: "24.22.3" };
+        case "read_overview": return fixture.projection;
+        case "control_session": {
+          const request = args.request;
+          fixture.controls.push(request);
+          const pane = fixture.projection.panes.find((item) => item.session.id === request.sessionId);
+          if (request.operation === "guide" && pane?.control.canGuide) return pane.control;
+          if (request.operation !== "takeover" || !pane?.control.canTakeover) {
+            throw { code: "denied", message: "This fixture does not grant control." };
           }
-          default: throw new Error("Unexpected fixture IPC command " + command);
+          pane.control = { ...readOnly, mode: "manual", canGuide: true, canReturn: true };
+          return pane.control;
         }
-      },
-    };
-  }, { initial: projection(count), readOnly });
-  const page = await context.newPage();
+        default: throw new Error("Unexpected fixture IPC command " + command);
+      }
+    },
+  };
+}
+
+async function openOverview(t, viewport, observation, count) {
+  const fixture = { initial: projection(count), readOnly };
+  const initialize = `(${installFixture})(${JSON.stringify(fixture)})`;
+  const page = await open(t, viewport, observation, "#/overview", { initialize });
   page.setDefaultTimeout(3_000);
-  const response = await page.goto("http://127.0.0.1:" + server.address().port + "/#/overview");
-  assert.equal(response?.status(), 200, "the desktop bundle serves its Angular entry point");
   await page.getByRole("heading", { level: 1, name: "Overview", exact: true }).waitFor();
   await page.locator("praxis-overview").evaluate((node) => Promise.all(node.getAnimations().map((animation) => animation.finished)));
   return page;
@@ -127,10 +89,6 @@ async function updateProjection(page, next) {
   await page.evaluate((next) => { window.overviewFixture.projection = next; }, next);
 }
 
-async function screenshot(page, name) {
-  if (traces) await page.screenshot({ path: join(traces, name + ".png"), animations: "disabled" });
-}
-
 async function assertNoHorizontalOverflow(page) {
   assert.equal(await page.evaluate(() => {
     const main = document.querySelector("main");
@@ -139,7 +97,7 @@ async function assertNoHorizontalOverflow(page) {
 }
 
 test("desktop gives one loaded worker prominence and preserves its focused session controls", async (t) => {
-  const page = await open(t, { width: 1280, height: 800 }, "overview-desktop", 4);
+  const page = await openOverview(t, { width: 1280, height: 800 }, "overview-desktop", 4);
   const panes = workers(page);
   const first = panes.nth(0);
   const second = panes.nth(1);
@@ -147,7 +105,7 @@ test("desktop gives one loaded worker prominence and preserves its focused sessi
   assert.equal(await panes.count(), 4);
   const collapsed = await first.boundingBox();
   assert.equal((await second.boundingBox()).y, collapsed.y, "workers share the default desktop row");
-  await screenshot(page, "overview-several");
+  await capture(page, "overview-several");
   const firstToggle = first.getByRole("button", { expanded: false });
   const secondToggle = second.getByRole("button", { expanded: false });
   await firstToggle.press("Enter");
@@ -169,7 +127,7 @@ test("desktop gives one loaded worker prominence and preserves its focused sessi
   assert.equal(await first.getAttribute("data-session-id"), projection(4).panes[0].session.id);
   await first.getByText(projection(4).panes[0].session.id, { exact: true }).waitFor();
   await assertNoHorizontalOverflow(page);
-  await screenshot(page, "overview-expanded");
+  await capture(page, "overview-expanded");
 
   const output = first.getByLabel("Session output");
   assert.equal(await output.textContent(), longOutput, "output uses the bounded bridge excerpt");
@@ -178,28 +136,37 @@ test("desktop gives one loaded worker prominence and preserves its focused sessi
     && Math.abs(node.scrollHeight - node.clientHeight - node.scrollTop) <= 1, await output.elementHandle());
   assert.ok(await output.evaluate((node) => node.scrollWidth <= node.clientWidth),
     "long unbroken text wraps within the terminal");
-  await screenshot(page, "overview-output-end");
+  await capture(page, "overview-output-end");
 
   await expandControl.click();
   const guide = first.getByRole("button", { name: "Send guidance" });
+  const handback = first.getByRole("button", { name: "Return control" });
   await guide.waitFor();
-  await first.getByRole("button", { name: "Return control" }).waitFor();
+  await handback.waitFor();
   await page.setViewportSize({ width: 1120, height: 760 });
   await page.locator("main").evaluate((node) => { node.scrollTop = 0; });
-  const [guideBox, workspace] = await Promise.all([guide.boundingBox(), page.locator("main").boundingBox()]);
-  assert.ok(guideBox.y + guideBox.height <= workspace.y + workspace.height,
-    "manual guidance remains visible at the default packaged window size");
-  await screenshot(page, "overview-guide-desktop");
+  const [guideBox, handbackBox, workspace] = await Promise.all([
+    guide.boundingBox(), handback.boundingBox(), page.locator("main").boundingBox(),
+  ]);
+  assert.ok(Math.max(guideBox.y + guideBox.height, handbackBox.y + handbackBox.height) <= workspace.y + workspace.height,
+    "both manual controls fit above the dock at the default packaged window size");
+  await capture(page, "overview-guide-desktop");
+  const guidance = "Check the fixture search results.";
+  await first.getByLabel("Manual guidance").fill(guidance);
+  await guide.click();
+  await first.getByText("Hermes accepted this guidance for delivery.", { exact: true }).waitFor();
   await page.setViewportSize({ width: 1280, height: 800 });
+  const sessionId = projection(4).panes[0].session.id;
   assert.deepEqual(await page.evaluate(() => window.overviewFixture.controls), [
-    { operation: "takeover", sessionId: projection(4).panes[0].session.id },
+    { operation: "takeover", sessionId },
+    { operation: "guide", sessionId, text: guidance },
   ]);
 
   await secondToggle.press("Space");
   await second.getByText(unknownUsage.reason, { exact: true }).waitFor();
   assert.equal(await panes.getByRole("button", { expanded: true }).count(), 1);
   assert.equal(await first.getByRole("button", { name: "Return control" }).count(), 0);
-  await screenshot(page, "overview-unknown-usage");
+  await capture(page, "overview-unknown-usage");
   assert.equal(await second.getByRole("button", { expanded: true }).evaluate((node) => node === document.activeElement), true);
   assert.ok(await second.evaluate((node) => Number.parseFloat(getComputedStyle(node).transitionDuration)) > 0);
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -208,11 +175,11 @@ test("desktop gives one loaded worker prominence and preserves its focused sessi
 });
 
 test("ten panes show bridge identities, status and explicit output states while manager activity moves and clears", async (t) => {
-  const page = await open(t, { width: 1280, height: 800 }, "overview-projection", 1);
+  const page = await openOverview(t, { width: 1280, height: 800 }, "overview-projection", 1);
   const panes = workers(page);
   await panes.first().waitFor();
   assert.equal(await panes.count(), 1);
-  await screenshot(page, "overview-one");
+  await capture(page, "overview-one");
   const next = projection(10);
   await updateProjection(page, next);
   await panes.nth(9).waitFor();
@@ -231,9 +198,9 @@ test("ten panes show bridge identities, status and explicit output states while 
   await marker.waitFor();
   assert.equal(await panes.nth(1).getByText("Manager activity", { exact: true }).count(), 1);
   await assertNoHorizontalOverflow(page);
-  await screenshot(page, "overview-ten");
+  await capture(page, "overview-ten");
   await panes.nth(9).getByRole("button", { expanded: false }).scrollIntoViewIfNeeded();
-  await screenshot(page, "overview-ten-tail");
+  await capture(page, "overview-ten-tail");
   const markedElsewhere = structuredClone(next);
   markedElsewhere.panes[1].highlighted = false;
   markedElsewhere.panes[5].highlighted = true;
@@ -249,7 +216,7 @@ test("ten panes show bridge identities, status and explicit output states while 
 });
 
 test("360-pixel Overview keeps panes, scoped controls and command bar operable", async (t) => {
-  const page = await open(t, { width: 360, height: 620 }, "overview-narrow", 10);
+  const page = await openOverview(t, { width: 360, height: 620 }, "overview-narrow", 10);
   const panes = workers(page);
   await panes.nth(9).waitFor();
   const [first, second] = await Promise.all([panes.nth(0).boundingBox(), panes.nth(1).boundingBox()]);
@@ -257,19 +224,19 @@ test("360-pixel Overview keeps panes, scoped controls and command bar operable",
   assert.equal(first.width, second.width);
   assert.ok(first.y + first.height <= second.y, "the narrow grid is a single column");
   await assertNoHorizontalOverflow(page);
-  await screenshot(page, "overview-narrow");
+  await capture(page, "overview-narrow");
   await panes.first().getByRole("button", { expanded: false }).press("Enter");
   await panes.first().getByRole("button", { name: "Take over" }).waitFor();
   assert.equal(await panes.first().getByRole("button", { expanded: true }).evaluate((node) => node === document.activeElement), true);
-  await screenshot(page, "overview-narrow-expanded");
+  await capture(page, "overview-narrow-expanded");
   await panes.first().getByRole("button", { name: "Take over" }).scrollIntoViewIfNeeded();
-  await screenshot(page, "overview-narrow-controls");
+  await capture(page, "overview-narrow-controls");
   await assertNoHorizontalOverflow(page);
   await panes.nth(9).getByRole("button", { expanded: false }).scrollIntoViewIfNeeded();
   const command = await page.getByRole("form", { name: "Command bar" }).boundingBox();
   assert.ok(command.y + command.height <= page.viewportSize().height);
   assert.ok(await page.locator("main").evaluate((node) => node.scrollTop > 0), "the workspace scrolls to the tenth worker");
-  await screenshot(page, "overview-narrow-tenth");
+  await capture(page, "overview-narrow-tenth");
   const last = panes.nth(9);
   await last.getByRole("button", { expanded: false }).press("Enter");
   const lastToggle = last.getByRole("button", { expanded: true });
@@ -278,5 +245,5 @@ test("360-pixel Overview keeps panes, scoped controls and command bar operable",
   const [focused, workspace] = await Promise.all([lastToggle.boundingBox(), page.locator("main").boundingBox()]);
   assert.ok(focused.y >= workspace.y && focused.y + focused.height <= workspace.y + workspace.height,
     "the keyboard-focused disclosure stays visible when a scrolled pane expands");
-  await screenshot(page, "overview-narrow-tenth-expanded");
+  await capture(page, "overview-narrow-tenth-expanded");
 });
