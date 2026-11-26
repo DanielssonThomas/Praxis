@@ -446,5 +446,10 @@ test("the installed Linux manager loads its policy and responds while an indepen
   releaseWorker();
   await until(async () => (await runtime.inspectAssignment(workerAssignment)).status === "stopped",
     "The approved cancellation did not stop the exact worker");
+  if (process.env.PRAXIS_RUN_EFFECTIVE_POLICY === "1") {
+    const { exerciseEffectivePolicy } = await import("./effective-policy-fixture.mjs");
+    const intent = store.eventsOfKind("action.requested").find(({ details }) => details?.action.kind === "task.delegate");
+    await exerciseEffectivePolicy(t, { directory, store, task, intent, grant, axiomRoot: axiom, policyDigest: setup.policy.digest });
+  }
   t.diagnostic("Chromium recovered the grounded turn, rendered scoped task and live worker cards, hid missing and foreign details, and honored the saved card preference. Scoped Activity remained available.");
 });
