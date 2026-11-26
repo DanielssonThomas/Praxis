@@ -12,6 +12,7 @@ import { ManagementService } from "@praxis/management";
 import { OperationalStore } from "@praxis/state";
 import { skillEvaluation } from "../fixtures/skill-evaluation.mjs";
 import { startHermesFixture, stopProcess, until } from "./hermes-fixture.mjs";
+import { startInstalledHermesWorker } from "./hermes-worker-fixture.mjs";
 
 const findingKey = "stale-projection";
 const skillId = "validate-projection";
@@ -102,7 +103,9 @@ test("native Hermes workers propose and load selected knowledge and background r
   const skillMarker = randomUUID();
   const skillBody = "Compare the persisted and visible projection. Fixture marker " + skillMarker + ".";
   let observedLoad;
-  const worker = await startHermesFixture(t, (body) => {
+  const observedNames = new Set();
+  const respond = (body) => {
+    for (const { function: definition } of body.tools ?? []) observedNames.add(definition.name);
     if (!body.tools?.length) return reply("Fixture auxiliary response.");
     const inputs = userMessages(body);
     const result = lastTool(body);
@@ -124,7 +127,9 @@ test("native Hermes workers propose and load selected knowledge and background r
       return reply("Selected skill loaded.");
     }
     return reply("Fixture worker response.");
-  }, mcpConfig(origin, workerKey));
+  };
+  const worker = await startInstalledHermesWorker(t, { profile: "installed-curation-worker", endpoint: origin,
+    mcpKey: workerKey, respond });
   const report = await worker.runtime.createAssignment(reports, "Submit one verified finding.");
   assert.match((await completed(worker.runtime, report)).output.text, /Finding submitted/);
   const view = await call(curator, "inspect_skill_proposals", { findingKey });
@@ -185,5 +190,19 @@ test("native Hermes workers propose and load selected knowledge and background r
   assert.match((await completed(worker.runtime, load)).output.text, /Selected skill loaded/);
   assert.ok(observedLoad?.includes(skillBody));
   assert.ok(!observedLoad.includes("The disposable fixture reproduced"));
+  assert.deepEqual([...observedNames].sort(), ["inspect_task", "inspect_worker", "load_curated_skill", "propose_skill", "report_worker"]
+    .map((name) => "mcp__praxis__" + name));
+  const workerClient = new Client({ name: "installed-worker-scope-fixture", version: "1" });
+  await workerClient.connect(new StreamableHTTPClientTransport(new URL(origin), {
+    requestInit: { headers: { Authorization: "Bearer " + workerKey } },
+  }));
+  try {
+    assert.equal((await call(workerClient, "load_curated_skill", { sessionId: reads.id, skillId, version: 2 })).code, "forbidden");
+    assert.equal((await call(workerClient, "load_curated_skill", { sessionId: reports.id, skillId, version: 1 })).code, "forbidden");
+    assert.equal((await call(workerClient, "decide_skill_proposal", decision)).error, true);
+  } finally {
+    await workerClient.close();
+  }
+  t.diagnostic("The installed native worker exposed exactly five scoped tools and read only the selected published version.");
   t.diagnostic("Native Hermes submitted the finding and loaded only published guidance. Its separate background review produced a native management usage receipt.");
 });
