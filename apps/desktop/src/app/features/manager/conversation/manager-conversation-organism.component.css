@@ -1,0 +1,52 @@
+:host { display: block; min-inline-size: 0; padding-block: 0.75rem; }
+.usage { margin: 0 0 0.65rem; color: var(--muted); font-size: 0.79rem; }
+
+ol {
+  display: grid;
+  gap: 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+li { min-inline-size: 0; }
+li strong { color: var(--muted); font-size: 0.78rem; }
+li p { margin: 0.25rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.user {
+  justify-self: end;
+  box-sizing: border-box;
+  max-inline-size: min(88%, 36rem);
+  padding: 0.55rem 0.8rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: var(--panel);
+}
+
+aside { margin-block-start: 0.8rem; }
+
+.selectors { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+.selector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.35rem;
+  max-inline-size: 100%;
+  padding: 0.4rem 0.65rem;
+  border-radius: 0.55rem;
+  font-size: 0.8rem;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.selector[aria-expanded="true"] { border-color: var(--accent); }
+.reference { color: var(--muted); font-size: 0.74rem; }
+
+praxis-manager-card {
+  display: block;
+  max-inline-size: 38rem;
+  margin-block-start: 0.6rem;
+  margin-inline-start: auto;
+  scroll-margin-block: 0.65rem;
+}

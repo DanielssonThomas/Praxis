@@ -1,0 +1,19 @@
+<praxis-shell-menu #menu [views]="views" [activeView]="navigation.view().id"
+  [activityAvailable]="activity.supported" [activityOpened]="activity.opened()"
+  [activityAttentionCount]="activity.attentionCount()"
+  (activityToggled)="activity.toggle()" />
+<div class="workspace">
+  <main>
+    @if (navigation.view().id !== 'setup') { <praxis-host-launch /> }
+    <router-outlet />
+  </main>
+  @if (activity.supported) {
+    <praxis-activity-panel [hidden]="!activity.opened()" (dismissed)="menu.focusActivity()" />
+  }
+</div>
+<praxis-command-bar
+  [command]="navigation.command"
+  [feedback]="feedback()"
+  [placeholder]="navigation.view().id === 'manager' ? 'Message the manager or type /…' : 'Type / for commands…'"
+  (commandSubmitted)="submit($event)"
+/>

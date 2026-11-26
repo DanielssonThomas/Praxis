@@ -1,0 +1,65 @@
+:host {
+  display: block;
+  animation: overview-enter 180ms ease-out;
+}
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-block-end: 0.75rem;
+}
+
+h1 { margin-inline-end: auto; font-size: clamp(1.15rem, 2vw, 1.5rem); }
+praxis-operator-unlock { display: block; }
+p { color: var(--muted); }
+p:empty { margin: 0; }
+
+.paging {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.65rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+@media (max-width: 42rem) {
+  .paging { flex-basis: 100%; }
+}
+
+.paging button[aria-disabled="true"] {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.workers {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 0.625rem;
+}
+
+@media (min-width: 42rem) {
+  .workers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workers > :only-child, .workers > [data-expanded="true"] { grid-column: 1 / -1; }
+}
+
+@media (min-width: 60rem) {
+  .workers:has(> [data-expanded="true"]), .workers:has(> :nth-child(7)) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .workers > [data-expanded="true"]:not(:only-child) {
+    grid-column: span 2;
+    grid-row: span 2;
+  }
+}
+
+@keyframes overview-enter {
+  from { opacity: 0.3; transform: translateY(0.35rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) { :host { animation: none; } }

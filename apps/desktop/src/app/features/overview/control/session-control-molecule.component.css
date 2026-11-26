@@ -1,0 +1,11 @@
+:host {
+  display: grid;
+  justify-items: start;
+  gap: 0.45rem;
+  margin-top: 0.4rem;
+}
+
+p { margin: 0; color: var(--muted); }
+form, label { display: grid; gap: 0.35rem; width: min(100%, 35rem); }
+.actions { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+textarea { box-sizing: border-box; width: 100%; resize: vertical; font: inherit; }

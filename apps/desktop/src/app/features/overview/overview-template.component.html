@@ -1,0 +1,30 @@
+@let projection = overview.projection();
+<header>
+  <h1>Overview</h1>
+  @if (overview.unlocked()) {
+    <button praxisButton type="button" (click)="overview.lock()">Lock overview</button>
+  }
+  @if (projection) {
+    <nav class="paging" aria-label="Overview pages">
+      <button praxisButton type="button" data-page-step="previous" [attr.aria-disabled]="!overview.canStep(-1)"
+        (click)="overview.step(-1)">Previous</button>
+      <span aria-live="polite">Page {{ projection.page.number }} of {{ projection.page.count }}</span>
+      <button praxisButton type="button" data-page-step="next" [attr.aria-disabled]="!overview.canStep(1)"
+        (click)="overview.step(1)">Next</button>
+    </nav>
+  }
+</header>
+@if (!overview.unlocked() && overview.canUnlock()) {
+  <praxis-operator-unlock formName="Open Overview" action="Open overview"
+    [busy]="overview.unlocking()" (credentialSubmitted)="overview.unlock($event)" />
+}
+<p role="status">{{ overview.status() }}</p>
+@if (projection) {
+  @if (!projection.association.available) { <p>{{ projection.association.reason }}</p> }
+  <section class="workers" aria-label="Session panes" [attr.aria-busy]="overview.paging()">
+    @for (pane of projection.panes; track pane.session.id) {
+      <praxis-overview-worker [pane]="pane" [expanded]="overview.expanded() === pane.session.id"
+        (toggled)="overview.expand($event)" />
+    }
+  </section>
+}

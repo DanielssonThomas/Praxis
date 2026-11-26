@@ -1,0 +1,18 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Scoped commands for the packaged Praxis features in the primary window.",
+  "windows": ["main"],
+  "permissions": [
+    "allow-host-status", "allow-retry-host",
+    "allow-unlock-manager", "allow-lock-manager", "allow-manager-turn",
+    "allow-unlock-overview", "allow-lock-overview", "allow-read-overview", "allow-control-session",
+    "allow-unlock-activity", "allow-lock-activity", "allow-read-activity",
+    "allow-inspect-activity", "allow-decide-activity",
+    "allow-kanban-list", "allow-kanban-unlock", "allow-kanban-lock",
+    "allow-kanban-link-issue", "allow-kanban-open-issue",
+    "allow-unlock-reports", "allow-lock-reports", "allow-read-reports",
+    "allow-save-report-preferences", "allow-clear-report-history",
+    "allow-read-settings", "allow-save-settings"
+  ]
+}

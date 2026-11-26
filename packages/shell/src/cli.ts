@@ -9,6 +9,7 @@ import { managerForegroundFromEnv } from "./manager-foreground.js";
 import { overviewRoutesFromEnv } from "./overview-server.js";
 import { reportsRoutesFromEnv } from "./reports-server.js";
 
+const desktopLaunch = process.env.PRAXIS_DESKTOP_HOST === "1";
 const port = Number(process.env.PRAXIS_PORT ?? 3210);
 if (!Number.isInteger(port) || port < 0 || port > 65535) {
   throw new Error("Set PRAXIS_PORT to an integer from 0 to 65535.");
@@ -38,6 +39,17 @@ const assets = new Map([
 ]);
 
 async function serve(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  if (desktopLaunch && request.url === "/api/desktop/status") {
+    if (request.method !== "GET") {
+      response.writeHead(405, { Allow: "GET" }).end();
+      return;
+    }
+    response.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+    }).end(JSON.stringify({ protocolVersion: 1, nodeVersion: process.versions.node }));
+    return;
+  }
   if (await serveSettings(request, response, config)) return;
   if (await activity?.serve(request, response)) return;
   if (await kanban?.serve(request, response)) return;
@@ -89,3 +101,12 @@ server.listen(port, "127.0.0.1", () => {
     console.log(`Praxis at http://127.0.0.1:${address.port}/`);
   }
 });
+
+if (desktopLaunch) {
+  // The desktop owns the other end of this private pipe, including if it crashes.
+  process.stdin.once("end", () => {
+    server.close();
+    server.closeAllConnections();
+  });
+  process.stdin.resume();
+}

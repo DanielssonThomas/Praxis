@@ -1,0 +1,37 @@
+@if (usage()) { <p class="usage">Turn usage · {{ usage() }}</p> }
+<ol role="log" aria-label="Manager conversation" tabindex="0">
+  @for (message of manager.history(); track $index) {
+    <li [class.user]="message.role === 'user'">
+      <strong>{{ message.role === "user" ? "You" : "Manager" }}</strong>
+      <p>{{ message.text }}</p>
+    </li>
+  }
+  @for (turn of manager.turns(); track turn.id) {
+    <li class="user"><strong>You</strong><p>{{ turn.prompt }}</p></li>
+    <li #response tabindex="-1">
+      <strong>Manager</strong>
+      <p>{{ turn.response }}</p>
+      @if (turn.cards.length) {
+        @let selected = selectedCard(turn);
+        <aside aria-label="Related work" (keydown.escape)="selected && closeCard(turn, selected, $event)">
+          <div class="selectors">
+            @for (card of turn.cards; track card.key) {
+              @let item = card.value;
+              <button praxisButton type="button" class="selector" [id]="triggerId(turn, card)"
+                [attr.aria-expanded]="selected?.key === card.key"
+                [attr.aria-controls]="selected?.key === card.key ? detailId(turn) : null"
+                (click)="toggleCard(turn, card)">
+                <span>{{ card.title }}</span>
+                @if (item.kind === "session") { <span class="reference">{{ item.session.id }}</span> }
+              </button>
+            }
+          </div>
+          @if (selected) {
+            <praxis-manager-card [id]="detailId(turn)" [card]="selected" [titleId]="detailId(turn) + '-title'"
+              (closed)="closeCard(turn, selected)" (dismissed)="dismissCard(turn, selected, response)" />
+          }
+        </aside>
+      }
+    </li>
+  }
+</ol>

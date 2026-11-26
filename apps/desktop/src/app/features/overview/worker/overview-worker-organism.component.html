@@ -1,0 +1,51 @@
+<article class="session-pane" [attr.data-session-id]="pane().session.id"
+  [attr.data-highlighted]="pane().highlighted" [attr.aria-label]="pane().task.title">
+  <header>
+    <p class="ticket">{{ pane().ticket }}</p>
+    <h2>{{ pane().task.title }}</h2>
+  </header>
+  <div class="terminal">
+    @if (terminal().truncated) { <p class="output-notice">Earlier output omitted.</p> }
+    <pre aria-label="Session output" [attr.tabindex]="terminal().hasOutput ? 0 : null"
+      [class.output-empty]="!terminal().hasOutput">{{ terminal().text }}</pre>
+  </div>
+  <footer>
+    <span class="status" [attr.data-status]="status()">{{ statusLabel() }}</span>
+    @if (pane().highlighted) { <span class="association">Manager activity</span> }
+    <button praxisButton class="disclosure" type="button" [attr.aria-expanded]="expanded()"
+      [attr.aria-label]="(expanded() ? 'Collapse ' : 'Expand ') + pane().task.title"
+      [attr.aria-controls]="'details-' + pane().session.id" (click)="toggle($event)">
+      {{ expanded() ? "Collapse" : "Expand" }}
+      <span class="chevron" aria-hidden="true"></span>
+    </button>
+  </footer>
+  <div class="details" [id]="'details-' + pane().session.id" [hidden]="!expanded()">
+    <section>
+      <h3>Session details</h3>
+      <dl>
+        <div><dt>Session</dt><dd class="identity">{{ pane().session.id }}</dd></div>
+      </dl>
+      <praxis-session-control [sessionId]="pane().session.id" [control]="pane().control" />
+    </section>
+    <section>
+      <h3>Session usage</h3>
+      @let measurement = usage();
+      @if (measurement.metering === "unknown") {
+        <p>{{ measurement.reason }}</p>
+      } @else {
+        <dl>
+          @if (measurement.inputTokens != null) {
+            <div><dt>Input tokens</dt><dd>{{ measurement.inputTokens.toLocaleString() }}</dd></div>
+          }
+          @if (measurement.outputTokens != null) {
+            <div><dt>Output tokens</dt><dd>{{ measurement.outputTokens.toLocaleString() }}</dd></div>
+          }
+          @if (measurement.cost?.amount != null) {
+            <div><dt>Cost</dt><dd>{{ measurement.cost?.amount }} {{ measurement.cost?.currency }}</dd></div>
+          }
+        </dl>
+      }
+      @if (pane().usageNotice) { <p class="usage-notice">{{ pane().usageNotice }}</p> }
+    </section>
+  </div>
+</article>

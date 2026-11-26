@@ -1,0 +1,32 @@
+[package]
+name = "praxis-desktop"
+version = "0.1.0"
+description = "Local Praxis workstation"
+edition = "2024"
+rust-version = "1.100"
+license = "MIT"
+default-run = "praxis-desktop"
+
+[lib]
+name = "praxis_desktop"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+ipc-export = []
+
+[[bin]]
+name = "export-ipc"
+required-features = ["ipc-export"]
+
+[dependencies]
+reqwest = { version = "=0.13.5", default-features = false, features = ["json", "query"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+specta = { version = "=2.0.0-rc.28", features = ["derive", "function"] }
+specta-typescript = "=0.0.15"
+tauri = "=2.12.7"
+tauri-specta = { version = "=2.0.0-rc.29", features = ["typescript"] }
+tokio = { version = "=1.54.1", features = ["macros", "sync"] }
+
+[build-dependencies]
+tauri-build = "=2.7.6"

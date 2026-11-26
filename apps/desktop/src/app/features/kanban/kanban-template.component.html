@@ -1,0 +1,28 @@
+<header>
+  <h1>Kanban</h1>
+  @if (kanban.stage() === "ready") {
+    <div class="actions">
+      <button praxisButton type="button" id="kanban-refresh" [disabled]="kanban.busy()" (click)="kanban.refresh()">
+        Refresh board
+      </button>
+      <button praxisButton type="button" [disabled]="kanban.busy()" (click)="kanban.lock()">Lock board</button>
+    </div>
+  }
+</header>
+<p id="kanban-status" role="status" [class.quiet]="!kanban.status()">{{ kanban.status() }}</p>
+
+@if (kanban.stage() === "locked") {
+  <praxis-operator-unlock formName="Open Kanban" action="Open board" [busy]="kanban.busy()"
+    (credentialSubmitted)="kanban.unlock($event)" />
+}
+
+@if (kanban.stage() === "ready") {
+  @if (kanban.columns().length) { <p class="board-help">Select a task to inspect its details and GitHub issues.</p> }
+  @if (kanban.providerMessage(); as message) {
+    <p id="kanban-provider">{{ message }}</p>
+  }
+  <praxis-kanban-board [columns]="kanban.columns()" [canLink]="kanban.canLink()" [busy]="kanban.busy()"
+    [boardStatus]="kanban.status()" [providerMessage]="kanban.providerMessage()" [taskFeedback]="kanban.taskFeedback()"
+    (refreshRequested)="kanban.refresh()"
+    (linkIssue)="kanban.link($event)" (openIssue)="kanban.open($event)" (invalidIssue)="kanban.invalidIssue($event)" />
+}

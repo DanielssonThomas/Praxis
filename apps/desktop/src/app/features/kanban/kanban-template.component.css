@@ -1,0 +1,27 @@
+:host { display: block; min-inline-size: 0; }
+
+header,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+header {
+  justify-content: space-between;
+}
+
+.actions button { font-size: 0.83rem; }
+
+.board-help,
+#kanban-status,
+#kanban-provider {
+  color: var(--muted);
+}
+
+.board-help { margin: 0.55rem 0 0.9rem; font-size: 0.86rem; }
+
+.quiet {
+  margin: 0;
+}

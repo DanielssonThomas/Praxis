@@ -1,0 +1,46 @@
+:host {
+  display: grid;
+  grid-template-areas:
+    "header header"
+    "navigation main"
+    "composer composer";
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  block-size: 100dvh;
+  overflow: hidden;
+}
+
+.workspace {
+  grid-area: main;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-block-size: 0;
+  min-inline-size: 0;
+  container-type: size;
+}
+
+main {
+  min-inline-size: 0;
+  overflow: auto;
+  padding: clamp(1rem, 3.75vw, 3rem);
+}
+
+praxis-command-bar { grid-area: composer; }
+
+@media (max-width: 60rem) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    --activity-panel-inline-size: auto;
+    --activity-panel-block-size: auto;
+    --activity-panel-max-block-size: min(14rem, 45cqh);
+  }
+}
+
+@media (max-width: 42rem) {
+  :host {
+    grid-template-areas: "header" "navigation" "main" "composer";
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+  }
+}

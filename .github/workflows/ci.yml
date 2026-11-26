@@ -40,3 +40,49 @@ jobs:
       - run: npm run build
       - run: npm exec -- playwright install chromium
       - run: npm run test:browser
+
+  desktop-ui:
+    name: Angular desktop shell
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run build:desktop
+      - run: npm run check:desktop-composition
+      - run: npm run check:desktop-rust
+      - run: npm exec -- playwright install chromium
+      - run: npm run test:desktop
+        env:
+          PRAXIS_UI_EVIDENCE_DIR: ${{ runner.temp }}/praxis-ui
+      - name: Upload desktop shell traces
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: angular-shell-browser-traces
+          path: ${{ runner.temp }}/praxis-ui
+
+  desktop-ipc:
+    name: Desktop IPC contracts
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev
+      - run: npm ci
+      - run: npm run build:desktop
+      - run: npm run check:desktop-ipc
+      - run: npm run test:desktop-ipc-drift

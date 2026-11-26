@@ -1,0 +1,60 @@
+:host { display: block; max-inline-size: 78rem; margin-inline: auto; }
+
+.report-header, .collection {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.65rem 1.25rem;
+  margin-block-end: 0.85rem;
+}
+
+.controls, .actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.controls label { display: flex; align-items: center; gap: 0.45rem; color: var(--muted); }
+.controls select {
+  max-inline-size: 100%;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+
+button { font-size: 0.84rem; }
+button:disabled { opacity: 0.55; cursor: default; }
+.customize { border-color: var(--accent); }
+.customize[aria-expanded="true"] { background: var(--accent-soft); }
+
+p { color: var(--muted); }
+.collection p, .confirmation p { margin: 0; font-size: 0.86rem; }
+.feedback { font-size: 0.86rem; }
+.feedback:empty { margin: 0; }
+
+.customization, .confirmation {
+  margin-block-end: 0.85rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--panel);
+}
+
+.customization h2 { margin: 0 0 0.65rem; font-size: 1.05rem; }
+.confirmation p { margin-block-end: 0.65rem; }
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 0.85rem;
+}
+
+@media (max-width: 30rem) {
+  .controls { inline-size: 100%; }
+  .controls label { flex: 1 1 100%; }
+}

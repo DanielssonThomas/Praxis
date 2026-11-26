@@ -1,0 +1,30 @@
+<aside id="desktop-activity" aria-labelledby="activity-title" [hidden]="!activity.opened()" (keydown.escape)="dismissInbox($event)">
+  <header>
+    <h2 id="activity-title" #heading tabindex="-1">Activity</h2>
+    <div class="actions">
+      @if (activity.unlocked()) {
+        <button praxisButton type="button" [disabled]="activity.busy()" (click)="activity.lock()">Lock activity</button>
+      }
+      <button praxisButton type="button" aria-label="Close activity" class="close" (click)="dismissInbox()">
+        <span aria-hidden="true">×</span>
+      </button>
+    </div>
+  </header>
+  @if (!activity.unlocked()) {
+    <praxis-operator-unlock formName="Unlock activity" action="Unlock activity"
+      [busy]="activity.busy()" (credentialSubmitted)="activity.unlock($event)" />
+  }
+  <p class="status" role="status">{{ activity.status() }}</p>
+  <div class="cards">
+    @for (card of activity.cards(); track card.requestId) {
+      <praxis-activity-card [card]="card" [busy]="activity.busy()"
+        (inspectRequested)="activity.inspect($event)" (reviewRequested)="startReview(card, $event)" />
+    }
+  </div>
+</aside>
+@if (activity.unlocked()) {
+  @if (review(); as reviewed) {
+    <praxis-activity-review [reviewed]="reviewed" [latest]="latest()" [enabled]="activity.canDecide(reviewed)"
+      [notice]="notice()" [status]="activity.status()" (dismissed)="dismissReview()" (decided)="decide($event)" />
+  }
+}

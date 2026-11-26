@@ -1,0 +1,22 @@
+<div #region class="board" role="region" aria-label="Native Hermes board" tabindex="0">
+  @for (column of columns(); track column.status) {
+    <section class="column" [attr.data-status]="column.status" [attr.aria-label]="nativeStatusLabel(column.status)">
+      <header>
+        <h2>{{ nativeStatusLabel(column.status) }}</h2>
+        <span class="count">{{ column.tasks.length }}</span>
+      </header>
+      @for (task of column.tasks; track task.nativeId) {
+        <praxis-kanban-card [task]="task" (opened)="open($event)" />
+      }
+    </section>
+  } @empty {
+    <p class="empty">Create or dispatch tasks in Hermes.</p>
+  }
+</div>
+<p class="announcement" role="status">{{ announcement() }}</p>
+
+@let selected = selectedTask();
+<praxis-kanban-details [task]="selected" [canLink]="canLink() && selected?.status !== 'archived'"
+  [busy]="busy()" [status]="detailStatus()" [providerMessage]="providerMessage()"
+  (closed)="close()" (refreshRequested)="refreshRequested.emit()"
+  (linkIssue)="linkIssue.emit($event)" (openIssue)="openIssue.emit($event)" (invalidIssue)="invalidIssue.emit($event)" />
