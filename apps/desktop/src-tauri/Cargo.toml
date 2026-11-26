@@ -1,0 +1,19 @@
+[package]
+name = "praxis-desktop"
+version = "0.1.0"
+description = "Local Praxis workstation"
+edition = "2024"
+rust-version = "1.100"
+license = "MIT"
+
+[lib]
+name = "praxis_desktop"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
+[dependencies]
+tauri = "=2.12.7"
+
+[build-dependencies]
+tauri-build = "=2.7.6"

@@ -1,0 +1,8 @@
+@if (host.native) {
+  <p role="status">{{ host.status() ?? "Local Praxis host ready." }}</p>
+  @if (host.status()) {
+    <button praxisButton type="button" [disabled]="host.retrying()" (click)="host.retry()">
+      Retry local host
+    </button>
+  }
+}

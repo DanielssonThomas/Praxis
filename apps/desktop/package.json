@@ -8,6 +8,8 @@
     "start": "ng serve",
     "typecheck": "ngc --noEmit --project tsconfig.app.json",
     "check:composition": "node scripts/check-composition.mjs",
+    "check:rust": "node scripts/check-rust.mjs",
+    "package:native": "node scripts/package-linux.mjs",
     "test": "node --test src/app/shell/shell-template.browser.mjs"
   },
   "dependencies": {
@@ -17,11 +19,13 @@
     "@angular/forms": "21.2.26",
     "@angular/platform-browser": "21.2.26",
     "@angular/router": "21.2.26",
+    "@tauri-apps/api": "2.12.5",
     "rxjs": "7.8.2"
   },
   "devDependencies": {
     "@angular/build": "21.2.31",
     "@angular/cli": "21.2.31",
-    "@angular/compiler-cli": "21.2.26"
+    "@angular/compiler-cli": "21.2.26",
+    "@tauri-apps/cli": "2.12.6"
   }
 }

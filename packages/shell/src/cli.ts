@@ -89,3 +89,12 @@ server.listen(port, "127.0.0.1", () => {
     console.log(`Praxis at http://127.0.0.1:${address.port}/`);
   }
 });
+
+if (process.env.PRAXIS_DESKTOP_HOST === "1") {
+  // The desktop owns the other end of this private pipe, including if it crashes.
+  process.stdin.once("end", () => {
+    server.close();
+    server.closeAllConnections();
+  });
+  process.stdin.resume();
+}

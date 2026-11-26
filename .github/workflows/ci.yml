@@ -55,6 +55,7 @@ jobs:
       - run: npm ci
       - run: npm run build:desktop
       - run: npm run check:desktop-composition
+      - run: npm run check:desktop-rust
       - run: npm exec -- playwright install chromium
       - run: npm run test:desktop
         env:
