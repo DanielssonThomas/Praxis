@@ -1,7 +1,8 @@
 import { computed, inject, Injectable, signal } from "@angular/core";
 import { DesktopBridge } from "../../native/desktop-bridge.service";
 import type { ManagerFrame, ManagerMessage, UsageMeasurement, WorkflowError } from "../../native/desktop-bridge.service";
-import type { ManagerTurn } from "./manager-view.model";
+import { managerCards } from "./manager-view.model";
+import type { ManagerCardSelection, ManagerTurn } from "./manager-view.model";
 
 const settled = new Set(["completed", "failed", "interrupted", "stopped", "unknown"]);
 
@@ -10,6 +11,7 @@ export class ManagerService {
   private readonly native = inject(DesktopBridge);
   private generation = 0;
   private readonly pending = signal<{ turnId: string; prompt: string } | null>(null);
+  private readonly selection = signal<ManagerCardSelection | null>(null);
   readonly supported = this.native.available;
   readonly unlocked = signal(false);
   readonly active = signal(false);
@@ -17,6 +19,7 @@ export class ManagerService {
   readonly reconnectable = computed(() => this.pending() !== null && !this.active());
   readonly history = signal<readonly ManagerMessage[]>([]);
   readonly turns = signal<readonly ManagerTurn[]>([]);
+  readonly selectedCard = this.selection.asReadonly();
   readonly usage = signal<UsageMeasurement | null>(null);
   readonly status = signal(this.supported ? "" : "The desktop Manager connection is unavailable.");
 
@@ -59,7 +62,14 @@ export class ManagerService {
     if (!this.unlocked()) return "Open Manager with the operator token before sending.";
     if (this.pending()) return this.active() ? "Wait for the current turn." : "Reconnect to continue the current turn.";
     const turnId = crypto.randomUUID();
-    this.turns.update((turns) => [...turns, { id: turnId, prompt, response: "", cards: [] }].slice(-24));
+    this.turns.update((turns) => [...turns, {
+      id: turnId,
+      prompt,
+      response: "",
+      cards: [],
+      dismissedCards: [],
+      presentedCards: false,
+    }].slice(-24));
     this.pending.set({ turnId, prompt });
     this.usage.set(null);
     void this.reconnect();
@@ -90,9 +100,21 @@ export class ManagerService {
     }
   }
 
-  dismiss(turnId: string, card: number): void {
-    this.turns.update((turns) => turns.map((turn) => turn.id === turnId
-      ? { ...turn, cards: turn.cards.filter(({ key }) => key !== card) } : turn));
+  selectCard(turnId: string, key: string): void {
+    this.selection.set({ turnId, key });
+  }
+
+  closeCard(): void {
+    this.selection.set(null);
+  }
+
+  dismiss(turnId: string, card: string): void {
+    this.turns.update((turns) => turns.map((turn) => turn.id === turnId ? {
+      ...turn,
+      cards: turn.cards.filter(({ key }) => key !== card),
+      dismissedCards: [...turn.dismissedCards, card],
+    } : turn));
+    this.closeCard();
   }
 
   private onFrame(turnId: string, frame: ManagerFrame): void {
@@ -106,7 +128,16 @@ export class ManagerService {
       const response = output.availability === "available"
         ? (output.truncated ? "Earlier output omitted.\n" : "") + output.text
         : terminal && !turn.response ? output.reason : turn.response;
-      return { ...turn, response, cards: resources?.map((value, key) => ({ key, value })) ?? turn.cards };
+      if (!resources) return { ...turn, response };
+      const cards = managerCards(resources).filter(({ key }) => !turn.dismissedCards.includes(key));
+      const selected = this.selection();
+      if (selected?.turnId === turn.id && !cards.some(({ key }) => key === selected.key)) {
+        this.closeCard();
+      }
+      if (!turn.presentedCards && cards.length > 0) {
+        this.selectCard(turn.id, cards[0].key);
+      }
+      return { ...turn, response, cards, presentedCards: turn.presentedCards || cards.length > 0 };
     }));
     if (terminal) this.pending.set(null);
     this.status.set(!terminal ? "Receiving manager output…" : snapshot.status === "completed"

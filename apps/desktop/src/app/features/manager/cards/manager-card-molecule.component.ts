@@ -1,6 +1,6 @@
 import { Component, computed, input, output } from "@angular/core";
 import { ButtonAtom } from "../../../ui/button/button-atom.component";
-import type { ManagerResource } from "../../../native/desktop-bridge.service";
+import type { ManagerCard } from "../manager-view.model";
 
 @Component({
   selector: "praxis-manager-card",
@@ -9,16 +9,12 @@ import type { ManagerResource } from "../../../native/desktop-bridge.service";
   styleUrl: "./manager-card-molecule.component.css",
 })
 export class ManagerCardMolecule {
-  readonly resource = input.required<ManagerResource>();
+  readonly card = input.required<ManagerCard>();
+  readonly titleId = input.required<string>();
+  readonly closed = output<void>();
   readonly dismissed = output<void>();
-  protected readonly title = computed(() => {
-    const resource = this.resource();
-    if (resource.kind === "task") return resource.task.title;
-    if (resource.kind === "session") return "Worker session";
-    return resource.resource === "task" ? "Task unavailable" : "Worker session unavailable";
-  });
   protected readonly status = computed(() => {
-    const resource = this.resource();
+    const resource = this.card().value;
     return resource.kind === "session" ? (resource.status?.replaceAll("_", " ") ?? "Unavailable") : "";
   });
 }
