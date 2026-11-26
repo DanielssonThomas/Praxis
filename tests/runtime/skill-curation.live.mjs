@@ -143,7 +143,7 @@ test("native Hermes workers propose and load selected knowledge and background r
       observedReview = JSON.stringify(result.content);
       return reply("Verified a scoped finding and recommended one reusable procedure.");
     }
-    return toolReply(body, "mcp__praxis__inspect_skill_proposals", { findingKey });
+    return toolReply(body, "mcp__praxis__inspect_skill_proposals", { findingKey, revision });
   }, mcpConfig(origin, backgroundKey));
   const manager = new ManagementService({
     store, runtime: background.runtime, profile: background.origin, principalId: backgroundGrant.principalId,

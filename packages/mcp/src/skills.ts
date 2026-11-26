@@ -20,7 +20,15 @@ export const proposedSkillSchema = z.strictObject({
   observation: note,
   evidence: note,
 });
-export const inspectProposalsSchema = z.strictObject({ findingKey: findingKeySchema.optional() });
+export const inspectProposalsSchema = z.strictObject({
+  findingKey: findingKeySchema.optional(),
+  revision: revision.optional(),
+  before: revision.optional(),
+}).refine(
+  ({ findingKey, revision, before }) => (revision === undefined || findingKey !== undefined)
+    && (before === undefined || revision !== undefined && before <= revision),
+  "Select a group revision before paging its findings.",
+);
 export const reviewProposalsSchema = z.strictObject({ findingKey: findingKeySchema, revision, taskId: taskIdSchema });
 export const loadCuratedSkillSchema = skillSelectionSchema.extend({ sessionId: sessionIdSchema });
 
@@ -154,30 +162,39 @@ export class CuratedSkills {
     });
   }
 
-  inspect(findingKey: string | undefined, taskIds: readonly string[], includeDecisions: boolean) {
+  inspect(input: z.infer<typeof inspectProposalsSchema>, taskIds: readonly string[], includeDecisions: boolean) {
+    const { findingKey, revision, before } = input;
     const tasks = JSON.stringify(taskIds);
     const groups = this.#database.prepare(
       "SELECT finding_key AS findingKey, MAX(sequence) AS revision, COUNT(*) AS total "
-      + "FROM skill_findings WHERE task_id IN (SELECT value FROM json_each(?)) AND (? IS NULL OR finding_key = ?) "
+      + "FROM skill_findings WHERE task_id IN (SELECT value FROM json_each(?)) "
+      + "AND (? IS NULL OR finding_key = ?) AND (? IS NULL OR sequence <= ?) "
       + "GROUP BY finding_key ORDER BY revision DESC LIMIT 50",
-    ).all(tasks, findingKey ?? null, findingKey ?? null);
+    ).all(tasks, findingKey ?? null, findingKey ?? null, revision ?? null, revision ?? null);
     if (findingKey === undefined) return { groups };
     const group = groups[0];
     if (group === undefined) throw new SkillCurationError("not_found", "The scoped proposal group is unavailable.");
     if (includeDecisions) this.#groupAccess(findingKey, taskIds);
-    const findings = this.#database.prepare(
-      "SELECT payload, submitted_at FROM skill_findings WHERE finding_key = ? AND sequence <= ? "
-      + "AND task_id IN (SELECT value FROM json_each(?)) ORDER BY sequence DESC LIMIT 50",
-    ).all(findingKey, group.revision, tasks).map(({ payload, submitted_at }) => ({
+
+    // A reviewer with a narrower task grant may have fewer findings within the pinned revision.
+    const snapshot = revision ?? Number(group.revision);
+    const pageSize = 50;
+    const rows = this.#database.prepare(
+      "SELECT sequence, payload, submitted_at FROM skill_findings WHERE finding_key = ? AND sequence <= ? "
+      + "AND (? IS NULL OR sequence < ?) AND task_id IN (SELECT value FROM json_each(?)) "
+      + "ORDER BY sequence DESC LIMIT ?",
+    ).all(findingKey, snapshot, before ?? null, before ?? null, tasks, pageSize + 1);
+    const findings = rows.slice(0, pageSize).map(({ payload, submitted_at }) => ({
       ...JSON.parse(String(payload)), submittedAt: submitted_at,
     }));
+    const nextBefore = rows.length > pageSize ? Number(rows[pageSize - 1].sequence) : undefined;
     const decisions = includeDecisions ? this.#database.prepare(
       "SELECT payload, curator, decided_at FROM skill_decisions "
       + "WHERE finding_key = ? AND revision <= ? ORDER BY revision DESC LIMIT 50",
-    ).all(findingKey, group.revision).map(({ payload, curator, decided_at }) => ({
+    ).all(findingKey, snapshot).map(({ payload, curator, decided_at }) => ({
       ...JSON.parse(String(payload)), curator, decidedAt: decided_at,
     })) : [];
-    return { group: { ...group, findings, decisions } };
+    return { group: { ...group, revision: snapshot, findings, decisions, ...(nextBefore !== undefined && { nextBefore }) } };
   }
 
   catalog() {

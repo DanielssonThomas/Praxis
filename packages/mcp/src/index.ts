@@ -280,10 +280,10 @@ function registerSkillTools(mcp: McpServer, store: OperationalStore, grant: Gran
 
   if (canCurate || grant.canReviewSkills) {
     mcp.registerTool("inspect_skill_proposals", {
-      description: "Inspect grouped findings before review. Supply a finding key to read scoped evidence.",
+      description: "Inspect grouped findings and their scoped evidence. Select an exact review revision and use nextBefore to retrieve older findings at that revision.",
       inputSchema: inspectProposalsSchema,
       annotations: { readOnlyHint: true },
-    }, ({ findingKey }) => answer(() => skills.inspect(findingKey, grant.taskIds, canCurate)));
+    }, (input) => answer(() => skills.inspect(input, grant.taskIds, canCurate)));
     mcp.registerTool("list_curated_skills", {
       description: "Search existing owners by listing published skill names, descriptions and latest versions.",
       inputSchema: z.strictObject({}),
@@ -300,8 +300,8 @@ function registerSkillTools(mcp: McpServer, store: OperationalStore, grant: Gran
       permitTask(grant, taskId);
       const workId = skills.review(findingKey, revision, grant.taskIds, taskId);
       const instruction = "Review this proposal using the installed Axiom knowledge skill (axiom:knowledge). "
-        + "Read the scoped evidence through inspect_skill_proposals for finding key " + findingKey
-        + " at revision " + revision + ". Inspect the authoritative owner and return a rationale, verification and advice "
+        + "Read the scoped evidence through inspect_skill_proposals with " + JSON.stringify({ findingKey, revision })
+        + ". Follow nextBefore at that revision to read older findings. Inspect the authoritative owner and return a rationale, verification and advice "
         + "to reuse, update, create or reject. Use list_curated_skills to check for existing skills.";
       const write = store.management.enqueue({ id: workId, taskId, kind: "maintenance", instruction }, Date.now());
       return { workId, write };

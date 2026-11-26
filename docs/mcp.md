@@ -77,7 +77,7 @@ The configured curator grant must cover the tasks whose findings it reviews. Eac
 | Tool | Scope and result |
 | --- | --- |
 | `propose_skill` | Workers submit a `sessionId`, `submissionId`, `findingKey`, `observation` and scoped reproduction `evidence`. Retries with the same submission ID and content reuse the receipt. Similar findings use the same stable key, such as `stale-projection`. |
-| `inspect_skill_proposals` | Curator and read-only reviewers list groups or inspect one `findingKey` for its revision and scoped evidence. The curator can also inspect its recorded decisions. |
+| `inspect_skill_proposals` | Curator and read-only reviewers list groups or inspect a `findingKey` for scoped evidence. Pass `revision` to read the group as it was when maintenance was queued. If the response includes `nextBefore`, pass its value as `before` with the same key and revision for the next page. The curator can also inspect recorded decisions. |
 | `list_curated_skills` | Curator and read-only reviewers find published names, descriptions and latest versions. |
 | `request_skill_review` | The curator explicitly queues background maintenance for one `findingKey`, current `revision` and participating `taskId`. Retry with the same values to reuse the work ID. |
 | `decide_skill_proposal` | The curator records a decision for a `findingKey` and `revision` with `sourceInspected` and `rationale`. |
