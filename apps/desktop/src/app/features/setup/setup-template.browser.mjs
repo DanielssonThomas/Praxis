@@ -102,6 +102,8 @@ for (const viewport of [wide, narrow]) {
     await page.getByText("Install and connect the default manager", { exact: true }).press("Enter");
     await page.getByText(/node scripts\/install-hermes-manager\.mjs/).waitFor();
     await page.getByText("PRAXIS_HERMES_ORIGIN", { exact: true }).waitFor();
+    assert.equal(await page.getByText("PRAXIS_MCP_CONFIG_FILE", { exact: true }).count(), 1,
+      "the guide identifies the authority file required by the configured local host");
     await page.getByText("96014e73ca14111be83c448898e41559f0f87f88", { exact: true }).waitFor();
     await assertLayout(page);
     await capture(page, `setup-profile-${viewport.width}`);
