@@ -5,16 +5,34 @@
 
 header {
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   margin-block-end: 0.75rem;
 }
 
-h1 { font-size: clamp(1.15rem, 2vw, 1.5rem); }
+h1 { margin-inline-end: auto; font-size: clamp(1.15rem, 2vw, 1.5rem); }
 praxis-operator-unlock { display: block; }
 p { color: var(--muted); }
 p:empty { margin: 0; }
+
+.paging {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.65rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+@media (max-width: 42rem) {
+  .paging { flex-basis: 100%; }
+}
+
+.paging button[aria-disabled="true"] {
+  opacity: 0.65;
+  cursor: default;
+}
 
 .workers {
   display: grid;

@@ -17,7 +17,7 @@ export const commands = {
 	managerTurn: (request: ManagerTurnRequest, output: Channel<ManagerFrame_Deserialize>, options?: InvokeOptions) => typedError<null, WorkflowError>(__TAURI_INVOKE("manager_turn", { request, output }, options)),
 	unlockOverview: (token: string, options?: InvokeOptions) => typedError<OverviewProjection_Serialize, WorkflowError>(__TAURI_INVOKE("unlock_overview", { token }, options)),
 	lockOverview: (options?: InvokeOptions) => __TAURI_INVOKE<void>("lock_overview", undefined, options),
-	readOverview: (options?: InvokeOptions) => typedError<OverviewProjection_Serialize, WorkflowError>(__TAURI_INVOKE("read_overview", undefined, options)),
+	readOverview: (request: OverviewPageRequest | null, options?: InvokeOptions) => typedError<OverviewProjection_Serialize, WorkflowError>(__TAURI_INVOKE("read_overview", { request }, options)),
 	controlSession: (request: SessionControlRequest, options?: InvokeOptions) => typedError<SessionControl, WorkflowError>(__TAURI_INVOKE("control_session", { request }, options)),
 	unlockActivity: (token: string, options?: InvokeOptions) => typedError<ActivityCard[], WorkflowError>(__TAURI_INVOKE("unlock_activity", { token }, options)),
 	lockActivity: (options?: InvokeOptions) => __TAURI_INVOKE<void>("lock_activity", undefined, options),
@@ -238,6 +238,15 @@ export type OverviewAssociation_Serialize = {
 	reason: string | null,
 };
 
+export type OverviewPage = {
+	number: number,
+	count: number,
+};
+
+export type OverviewPageRequest = {
+	page: number,
+};
+
 export type OverviewPane = OverviewPane_Serialize | OverviewPane_Deserialize;
 
 export type OverviewPane_Deserialize = {
@@ -265,11 +274,13 @@ export type OverviewProjection = OverviewProjection_Serialize | OverviewProjecti
 export type OverviewProjection_Deserialize = {
 	panes: OverviewPane_Deserialize[],
 	association: OverviewAssociation_Deserialize,
+	page: OverviewPage,
 };
 
 export type OverviewProjection_Serialize = {
 	panes: OverviewPane_Serialize[],
 	association: OverviewAssociation_Serialize,
+	page: OverviewPage,
 };
 
 export type OverviewRuntime = OverviewRuntime_Serialize | OverviewRuntime_Deserialize;

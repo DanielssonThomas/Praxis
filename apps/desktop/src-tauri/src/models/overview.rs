@@ -4,9 +4,22 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 #[derive(Deserialize, Serialize, Type)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct OverviewPageRequest {
+    pub(crate) page: u32,
+}
+
+#[derive(Deserialize, Serialize, Type)]
 pub(crate) struct OverviewProjection {
     panes: Vec<OverviewPane>,
     association: OverviewAssociation,
+    page: OverviewPage,
+}
+
+#[derive(Deserialize, Serialize, Type)]
+pub(crate) struct OverviewPage {
+    number: u32,
+    count: u32,
 }
 
 #[derive(Deserialize, Serialize, Type)]
