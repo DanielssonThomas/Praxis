@@ -17,7 +17,7 @@
 
   @switch (step()) {
     @case (0) {
-      <p>The desktop starts a local Node.js sidecar. This check reports its startup status.</p>
+      <p>Praxis starts its bundled Node.js sidecar when the desktop opens.</p>
       <div class="host-check">
         <p #status id="setup-host-status" role="status" tabindex="-1">
           @if (!host.native) {
@@ -55,12 +55,10 @@
       </details>
     }
     @case (2) {
-      <p>Generate a separate local operator token and set its lowercase SHA-256 digest as
+      <p>Generate a separate operator token. Set its lowercase SHA-256 hex digest as
         <code>PRAXIS_OPERATOR_TOKEN_DIGEST</code> in the desktop launch environment.</p>
-      <p>Restart Praxis with the configured environment. Enter the original token in Manager.
-        Opening Manager checks operator access and reads the named Hermes profile's transcript.</p>
-      <p>For the operator setup and launch configuration, see <code>docs/approvals.md</code> and
-        <code>docs/manager-foreground.md</code> in your Praxis checkout.</p>
+      <p>Restart Praxis and enter the original token in Manager to authenticate and read the named Hermes transcript.</p>
+      <p>See <code>docs/approvals.md</code> and <code>docs/manager-foreground.md</code> for the full steps.</p>
     }
   }
 
