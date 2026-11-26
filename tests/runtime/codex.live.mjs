@@ -95,8 +95,10 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
         assert.deepEqual(brief, briefFor(brief.id));
         assert.ok(userMessages.slice(0, -1).some((item) => item.includes(`Axiom policy digest: ${corePolicy.digest}\n\n${core}`)));
         deliveries.push(brief.id);
-        assert.ok(userMessages.every((message) => !message.includes(skillBody)), "Discovery must not load skill instructions.");
-        assert.equal(userMessages.some((message) => message.includes(skillDescription)), brief.id === selectedTask.id,
+        const messages = body.input.filter(({ type }) => type === "message")
+          .flatMap(({ content }) => content).map(({ text }) => text);
+        assert.ok(messages.every((message) => !message.includes(skillBody)), "Discovery must not load skill instructions.");
+        assert.equal(messages.some((message) => message.includes(skillDescription)), brief.id === selectedTask.id,
           "Only the selected Codex assignment should discover the curated skill.");
         if (brief.id === "task_complete") {
           assert.ok(body.tools?.some(({ name }) => name === "exec"), "The native worker must advertise Code Mode exec.");
