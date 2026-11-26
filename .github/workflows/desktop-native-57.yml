@@ -1,0 +1,123 @@
+name: Praxis #57 native validation
+
+on:
+  push:
+    branches: [codex/57-ubuntu-verification]
+
+permissions:
+  contents: read
+
+jobs:
+  native-kanban:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      GDK_BACKEND: x11
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Select tracked source and prepare evidence
+        run: |
+          set -euo pipefail
+          source=$(git rev-parse HEAD^)
+          git checkout --detach "$source"
+          mkdir -p "$RUNNER_TEMP/praxis-57-evidence"
+          {
+            echo "CARGO_TARGET_DIR=$RUNNER_TEMP/praxis-57-cargo"
+            echo "PRAXIS_DESKTOP_EVIDENCE_DIR=$RUNNER_TEMP/praxis-57-evidence"
+            echo "PRAXIS_HERMES_BIN=$RUNNER_TEMP/praxis-hermes-venv/bin/hermes"
+          } >> "$GITHUB_ENV"
+          {
+            echo "Praxis source revision $source"
+            uname -sm
+            sed -n 's/^PRETTY_NAME=//p' /etc/os-release
+            node --version
+          } | tee "$RUNNER_TEMP/praxis-57-evidence/source.txt"
+      - name: Install native GTK and WebKit dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev webkit2gtk-driver xvfb xauth dbus-x11
+      - name: Export the Rust-owned IPC contract
+        run: |
+          set -euo pipefail
+          mkdir -p apps/desktop/dist/browser
+          printf '<!doctype html><html lang="en"><title>IPC exporter</title></html>\n' > apps/desktop/dist/browser/index.html
+          npm run generate:desktop-ipc
+          cp apps/desktop/src/generated/desktop-ipc.ts "$PRAXIS_DESKTOP_EVIDENCE_DIR/"
+          if git diff --exit-code -- apps/desktop/src/generated/desktop-ipc.ts > "$PRAXIS_DESKTOP_EVIDENCE_DIR/bindings.diff"; then
+            echo "Checked-in generated bindings match." | tee "$PRAXIS_DESKTOP_EVIDENCE_DIR/bindings-state.txt"
+          else
+            echo "Bootstrap run generated a candidate export. Commit it before exact-source acceptance." | tee "$PRAXIS_DESKTOP_EVIDENCE_DIR/bindings-state.txt"
+          fi
+      - name: Build and package the application
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run package:desktop 2>&1 | tee "$PRAXIS_DESKTOP_EVIDENCE_DIR/package.log"
+          package=$(find "$CARGO_TARGET_DIR" -path '*/bundle/deb/*.deb' -type f -print -quit)
+          test -n "$package"
+          echo "PRAXIS_DESKTOP_DEB=$package" >> "$GITHUB_ENV"
+          sha256sum "$package" | tee "$PRAXIS_DESKTOP_EVIDENCE_DIR/package-sha256.txt"
+          cp "$package" "$PRAXIS_DESKTOP_EVIDENCE_DIR/"
+      - name: Run Angular and native contract checks
+        run: |
+          set -euo pipefail
+          {
+            cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --all -- --check
+            cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml
+            cargo clippy --locked --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
+            npm run check:desktop-rust
+            npm run check:desktop-composition
+            npm run check:desktop-ipc
+            npm run test:desktop-ipc-drift
+          } 2>&1 | tee "$PRAXIS_DESKTOP_EVIDENCE_DIR/contracts.log"
+      - name: Run workspace and browser checks
+        run: |
+          set -euo pipefail
+          {
+            npm test
+            npm run typecheck
+            npm run build
+            npm exec -- playwright install chromium
+            npm run test:desktop
+            npm run test:browser
+          } 2>&1 | tee "$PRAXIS_DESKTOP_EVIDENCE_DIR/workspace.log"
+      - name: Install the pinned native Hermes fixture
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/uv-installer"
+          "$RUNNER_TEMP/uv-installer/bin/pip" install uv==0.13.10
+          uv="$RUNNER_TEMP/uv-installer/bin/uv"
+          source="$RUNNER_TEMP/praxis-hermes"
+          mkdir "$source"
+          git -C "$source" init --quiet
+          git -C "$source" fetch --quiet --depth 1 https://github.com/NousResearch/hermes-agent.git caafe5389ae585ef77387a962aee05b1bcf17029
+          git -C "$source" checkout --quiet --detach FETCH_HEAD
+          test "$(git -C "$source" rev-parse HEAD)" = caafe5389ae585ef77387a962aee05b1bcf17029
+          "$uv" python install 3.14.10
+          UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/praxis-hermes-venv" "$uv" sync --frozen --project "$source" \
+            --python 3.14.10 --extra messaging --extra mcp --no-dev
+      - name: Observe packaged Kanban and native Hermes
+        run: |
+          set -euo pipefail
+          {
+            pkg-config --modversion webkit2gtk-4.1
+            npm run test:kanban:live
+            xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- node --test tests/runtime/desktop-kanban.live.mjs
+          } 2>&1 | tee "$PRAXIS_DESKTOP_EVIDENCE_DIR/kanban.log"
+      - name: Preserve source, package, contract and observation artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: praxis-57-native-evidence
+          path: ${{ runner.temp }}/praxis-57-evidence
+          retention-days: 7
