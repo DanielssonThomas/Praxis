@@ -1,23 +1,22 @@
 import assert from "node:assert/strict";
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { once } from "node:events";
-import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { HermesRuntime } from "@praxis/hermes-runtime";
 import { createPraxisMcpServer } from "@praxis/mcp";
 import { OperationalStore } from "@praxis/state";
-import { providerFixture, stopProcess, until } from "./hermes-fixture.mjs";
+import { until } from "./hermes-fixture.mjs";
+import { startInstalledHermesWorker } from "./hermes-worker-fixture.mjs";
 
 const run = promisify(execFile);
-const installer = fileURLToPath(new URL("../../scripts/install-hermes-worker.mjs", import.meta.url));
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 const token = () => randomBytes(32).toString("base64url");
 const tool = (name) => `mcp__praxis__${name}`;
@@ -58,10 +57,10 @@ test("two installed native workers report concurrently and stay isolated with no
   const store = new OperationalStore(join(directory, "operational.sqlite"));
   const hold = Promise.withResolvers();
   const workers = ["first", "second"].map((id) => ({
-    id, profile: `fixture-worker-${id}`, home: join(directory, id),
+    id, profile: `fixture-worker-${id}`,
     task: { schemaVersion: 1, id: `task_worker_${id}`, title: `Fixture task ${id}` },
     session: { schemaVersion: 1, id: `session_worker_${id}`, taskId: `task_worker_${id}` },
-    principal: `principal_worker_${id}`, mcpKey: token(), apiKey: token(),
+    principal: `principal_worker_${id}`, mcpKey: token(),
     fact: `A distinct observation for the ${id} worker.`,
     proposal: `Skill proposal for the ${id} worker with fixture evidence.`,
     seen: new Set(), reachedReport: false, ownReport: false, deniedForeignReport: false,
@@ -70,11 +69,7 @@ test("two installed native workers report concurrently and stay isolated with no
   let mcp;
   t.after(async () => {
     hold.resolve();
-    await Promise.all(workers.map(async ({ gateway, provider, client }) => {
-      await client?.close();
-      await stopProcess(gateway);
-      await provider?.close();
-    }));
+    await Promise.all(workers.map(({ client }) => client?.close()));
     if (mcp?.listening) await close(mcp);
     store.close();
     await rm(directory, { recursive: true, force: true, maxRetries: 3 });
@@ -99,16 +94,12 @@ test("two installed native workers report concurrently and stay isolated with no
 
   for (const worker of workers) {
     const other = workers.find((candidate) => candidate !== worker);
-    const setup = await run(process.execPath, [installer, "--hermes-bin", binary, "--hermes-home", worker.home,
-      "--profile", worker.profile, "--axiom-root", axiom, "--mcp-origin", endpoint], { env, timeout: 45_000 });
-    const installed = JSON.parse(setup.stdout);
-    assert.equal(installed.profile, worker.profile);
-    assert.equal(installed.policy.status, "enabled");
-    const profileHome = join(worker.home, "profiles", worker.profile);
-    const soul = join(profileHome, "SOUL.md");
-    assert.match(await readFile(soul, "utf8"), /# Praxis worker/);
-    await appendFile(soul, `\nProfile marker for ${worker.id} only.\n`);
-    worker.provider = await providerFixture((call) => {
+    const customize = async (profileHome) => {
+      const soul = join(profileHome, "SOUL.md");
+      assert.match(await readFile(soul, "utf8"), /# Praxis worker/);
+      await appendFile(soul, `\nProfile marker for ${worker.id} only.\n`);
+    };
+    const respond = (call) => {
       const lastUser = call.messages.findLastIndex(({ role }) => role === "user");
       const input = call.messages[lastUser]?.content;
       const names = call.tools?.map(({ function: definition }) => definition.name) ?? [];
@@ -138,24 +129,10 @@ test("two installed native workers report concurrently and stay isolated with no
       }
       worker.deniedForeignReport = observed.includes("forbidden");
       return modelReply("The worker completed with its scoped permissions.");
-    });
-
-    await appendFile(join(profileHome, "config.yaml"), ["", "model:", "  provider: custom",
-      `  base_url: ${worker.provider.origin}`, "  default: fake-model", "  api_key: fixture-only", "  context_length: 128000", ""].join("\n"));
-    await writeFile(join(profileHome, ".env"), `API_SERVER_KEY=${worker.apiKey}\nPRAXIS_MCP_TOKEN=${worker.mcpKey}\n`, { mode: 0o600 });
-    const reservation = createServer();
-    const port = await listen(reservation);
-    await close(reservation);
-    worker.gateway = spawn(binary, ["-p", worker.profile, "gateway", "run"], { cwd: directory, stdio: "ignore", env: {
-      ...env, HERMES_HOME: worker.home, API_SERVER_ENABLED: "true", API_SERVER_HOST: "127.0.0.1", API_SERVER_PORT: String(port),
-    } });
-    worker.origin = `http://127.0.0.1:${port}/p/${worker.profile}`;
-    worker.runtime = new HermesRuntime({ origin: worker.origin, apiKey: worker.apiKey });
-    await until(async () => {
-      assert.equal(worker.gateway.exitCode, null, "The worker gateway exited during startup.");
-      try { return (await worker.runtime.capabilities()).submission.available; }
-      catch (error) { if (error.code === "unavailable") return false; throw error; }
-    }, "The worker did not start its authenticated native route.");
+    };
+    Object.assign(worker, await startInstalledHermesWorker(t, {
+      profile: worker.profile, endpoint, mcpKey: worker.mcpKey, customize, respond,
+    }));
   }
 
   await Promise.all(workers.map(async (worker) => {

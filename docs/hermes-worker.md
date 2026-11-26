@@ -53,7 +53,7 @@ With Praxis built, run the fixture against the pinned source launchers. It uses 
 ```sh
 PRAXIS_HERMES_BIN=/absolute/path/to/hermes \
 PRAXIS_AXIOM_ROOT=/absolute/path/to/built-axiom \
-node --test tests/runtime/hermes-worker-install.live.mjs
+node --test tests/runtime/hermes-worker-install.live.mjs tests/runtime/skill-curation.live.mjs
 ```
 
-The fixture exercises concurrent native assignments, profile and conversation isolation, loaded Axiom policy, scoped reports, and authority denials while the manager is offline.
+The fixtures exercise concurrent native assignments, profile and conversation isolation, loaded Axiom policy, and authority denials while the manager is offline. The installed worker also exercises scoped proposals and reads the selected published skill version through the curation service.
