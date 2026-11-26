@@ -1,2 +1,20 @@
-<h1>Overview</h1>
-<p role="status">Session output is unavailable in this desktop build.</p>
+<header>
+  <h1>Overview</h1>
+  @if (overview.unlocked()) {
+    <button praxisButton type="button" (click)="overview.lock()">Lock overview</button>
+  }
+</header>
+@if (!overview.unlocked() && overview.canUnlock()) {
+  <praxis-operator-unlock formName="Open Overview" action="Open overview"
+    [busy]="overview.unlocking()" (credentialSubmitted)="overview.unlock($event)" />
+}
+<p role="status">{{ overview.status() }}</p>
+@if (overview.projection(); as projection) {
+  @if (!projection.association.available) { <p>{{ projection.association.reason }}</p> }
+  <section class="workers" aria-label="Session panes">
+    @for (pane of projection.panes; track pane.session.id) {
+      <praxis-overview-worker [pane]="pane" [expanded]="overview.expanded() === pane.session.id"
+        (toggled)="overview.expand($event)" />
+    }
+  </section>
+}

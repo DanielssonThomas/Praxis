@@ -1,0 +1,21 @@
+<p class="context">Context window and compaction unavailable</p>
+@if (usage()) { <p class="context">Turn usage {{ usage() }} tokens</p> }
+<ol role="log" aria-label="Manager conversation">
+  @for (message of manager.history(); track $index) {
+    <li><strong>{{ message.role === "user" ? "You" : "Manager" }}</strong><p>{{ message.text }}</p></li>
+  }
+  @for (turn of manager.turns(); track turn.id) {
+    <li><strong>You</strong><p>{{ turn.prompt }}</p></li>
+    <li>
+      <strong>Manager</strong>
+      <p>{{ turn.response }}</p>
+      @if (turn.cards.length) {
+        <aside aria-label="Related work">
+          @for (card of turn.cards; track card.key) {
+            <praxis-manager-card [resource]="card.value" (dismissed)="manager.dismiss(turn.id, card.key)" />
+          }
+        </aside>
+      }
+    </li>
+  }
+</ol>

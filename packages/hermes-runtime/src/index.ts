@@ -230,6 +230,22 @@ export class HermesRuntime {
     return (await this.#readRun(assignment)).snapshot;
   }
 
+  async readTurnHistory(sessionValue: unknown): Promise<{ role: "user" | "assistant"; text: string }[]> {
+    const session = parse(sessionSchema, sessionValue, "invalid_input", "Supply a valid Praxis session.");
+    const nativeSession = nativeSessionFor(session.taskId, session.id, this.#profile);
+    try {
+      const rows = await this.#readTranscript(nativeSession, 24);
+      return rows.flatMap(({ role, content }) => {
+        if ((role !== "user" && role !== "assistant") || typeof content !== "string") return [];
+        const output = normalizeOutput(content);
+        return output.availability === "available" ? [{ role, text: output.text }] : [];
+      });
+    } catch (error) {
+      if (error instanceof HermesRuntimeError && error.code === "not_found") return [];
+      throw error;
+    }
+  }
+
   async inspectLiveAssignment(value: unknown, previous?: HermesOutputCursor): Promise<RunInspection & { cursor?: HermesOutputCursor }> {
     const assignment = parse(hermesAssignmentSchema, value, "invalid_input", "Supply a valid Hermes assignment reference.");
     const capabilities = await this.capabilities();

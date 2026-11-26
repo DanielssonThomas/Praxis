@@ -1,0 +1,19 @@
+.context { color: var(--muted); font-size: 0.9rem; }
+
+ol {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+li { inline-size: min(100%, 56rem); }
+p { margin: 0.25rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+aside {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.5rem;
+  margin-block-start: 0.5rem;
+}

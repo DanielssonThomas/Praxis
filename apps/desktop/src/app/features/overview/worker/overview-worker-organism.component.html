@@ -1,0 +1,18 @@
+<article class="session-pane" [attr.data-session-id]="pane().session.id"
+  [attr.data-highlighted]="pane().highlighted" [attr.aria-label]="pane().task.title">
+  <div class="heading">
+    <h2>{{ pane().task.title }}</h2>
+    <button praxisButton type="button" [attr.aria-expanded]="expanded()"
+      [attr.aria-controls]="'details-' + pane().session.id" (click)="toggled.emit(pane().session.id)">
+      {{ expanded() ? "Collapse" : "Expand" }}
+    </button>
+  </div>
+  <p>{{ pane().ticket }}</p>
+  <p>{{ state() }}</p>
+  @if (pane().highlighted) { <p>Manager activity</p> }
+  <pre aria-label="Session output" tabindex="0">{{ output() }}</pre>
+  <div [id]="'details-' + pane().session.id" [hidden]="!expanded()">
+    <p>{{ pane().session.id }} · {{ usage() }}</p>
+    @if (pane().usageNotice) { <p>{{ pane().usageNotice }}</p> }
+  </div>
+</article>

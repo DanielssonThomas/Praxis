@@ -1,0 +1,32 @@
+:host { display: block; min-inline-size: 0; }
+:host([data-expanded="true"]) { grid-column: 1 / -1; }
+
+article {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  background: var(--panel);
+  overflow-wrap: anywhere;
+  transition: border-color 140ms ease;
+}
+
+article[data-highlighted="true"] { border-color: var(--accent); }
+.heading { display: flex; align-items: start; justify-content: space-between; gap: 0.4rem; }
+h2, p { margin: 0; }
+h2 { font-size: 1rem; }
+p { color: var(--muted); }
+pre {
+  min-block-size: 3rem;
+  max-block-size: 8rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0.2rem 0;
+  padding: 0.35rem;
+  background: var(--surface);
+}
+
+:host([data-expanded="true"]) pre { max-block-size: 18rem; }
+@media (prefers-reduced-motion: reduce) { article { transition: none; } }
