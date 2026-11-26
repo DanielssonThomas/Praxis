@@ -49,7 +49,8 @@
   --axiom-root /path/to/built-axiom</code></pre>
         <p>Configure the model and scoped Praxis MCP access in the named profile using the same guide.
           Start the Hermes gateway from the dedicated root.</p>
-        <p>Set <code>PRAXIS_HERMES_ORIGIN</code> to the local gateway URL for the named profile
+        <p>In the desktop launch environment, set <code>PRAXIS_MCP_CONFIG_FILE</code> to the same authority file
+          used by Praxis MCP. Set <code>PRAXIS_HERMES_ORIGIN</code> to the local gateway URL for the named profile
           (for example <code>http://127.0.0.1:8642/p/praxis-manager</code>).
           Set <code>PRAXIS_HERMES_API_KEY</code> to that profile's API bearer and restart Praxis.</p>
       </details>

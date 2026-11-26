@@ -74,7 +74,7 @@ The readiness command queries the supervised Node host and returns the running N
 In the Linux x64 package, open **Menu → Setup**, or enter `/setup` or `/su` in the command bar.
 
 1. **Local host** shows the startup result for the packaged Node.js sidecar. Check the desktop installation and choose **Retry local host** if startup fails.
-2. **Hermes profile** links to the existing Settings editor and gives the pinned [named Manager installation and connection steps](hermes-manager.md). Set the Hermes profile name in Settings and match it to the named gateway path in the desktop launch environment.
+2. **Hermes profile** links to the existing Settings editor and gives the pinned [named Manager installation and connection steps](hermes-manager.md). Match the profile name in Settings to the named gateway path and set `PRAXIS_MCP_CONFIG_FILE` to the same authority file used by Praxis MCP in the desktop launch environment.
 3. **Operator access** explains the local operator token and opens Manager. Use the [operator access setup](approvals.md#configure-operator-access) to configure its digest, then enter the token in the existing Manager unlock form.
 
 The ready indication and version on the first step come from the supervised local host. Manager checks the authenticated named profile by loading its transcript on unlock. [Hermes Manager setup](hermes-manager.md#verify-the-setup) documents the separate native Axiom checks. [Release verification](https://github.com/DanielssonThomas/Praxis/issues/24) owns the clean-install exercise and final packaged artifact.

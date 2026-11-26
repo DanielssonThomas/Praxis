@@ -14,6 +14,7 @@ const reply = "The configured named Hermes profile answered.";
 const hostStatus = "#setup-host-status";
 const guideHeading = "#setup-step-heading";
 const operatorInput = 'form[aria-label="Open Manager"] input[type="password"]';
+const digest = (token) => createHash("sha256").update(token).digest("hex");
 
 async function command(desktop, value) {
   const field = await desktop.element('[aria-label="Command"]');
@@ -42,17 +43,29 @@ test("packaged Setup recovers a missing sidecar and hands off authenticated Mana
   const sidecar = join(installed, "usr/lib/Praxis/host/bin/node");
   const withheld = join(directory, "withheld-node");
   const configPath = join(directory, "settings.json");
+  const authorityPath = join(directory, "authority.json");
   const defaults = defaultSettings();
   const settings = JSON.stringify({ ...defaults, manager: { ...defaults.manager, profile } });
   await writeFile(configPath, settings, { mode: 0o600 });
   const operator = randomBytes(32).toString("base64url");
+  await writeFile(authorityPath, JSON.stringify({
+    schemaVersion: 1,
+    database: join(directory, "state.sqlite"),
+    grants: [{
+      principalId: "principal_setup_fixture",
+      tokenDigest: digest(randomBytes(32)),
+      taskIds: [],
+      sessions: [],
+      actionKinds: [],
+    }],
+  }), { mode: 0o600 });
   const { origin, apiKey } = await startNamedHermesFixture(t, profile,
     () => ({ message: { role: "assistant", content: reply } }));
   const environment = {
     HOME: directory, XDG_DATA_HOME: join(directory, "data"),
     XDG_CONFIG_HOME: join(directory, "config"), XDG_CACHE_HOME: join(directory, "cache"),
     PRAXIS_CONFIG_FILE: configPath, PRAXIS_HERMES_ORIGIN: origin, PRAXIS_HERMES_API_KEY: apiKey,
-    PRAXIS_OPERATOR_TOKEN_DIGEST: createHash("sha256").update(operator).digest("hex"),
+    PRAXIS_MCP_CONFIG_FILE: authorityPath, PRAXIS_OPERATOR_TOKEN_DIGEST: digest(operator),
   };
   const evidence = process.env.PRAXIS_DESKTOP_EVIDENCE_DIR;
   if (evidence) await mkdir(evidence, { recursive: true });
