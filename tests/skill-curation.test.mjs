@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { promisify } from "node:util";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import * as mcp from "@praxis/mcp";
@@ -87,7 +89,7 @@ async function fixture(t) {
       },
     };
   };
-  return { start, validated };
+  return { start, validated, root, configuration };
 }
 
 function finding(session = firstSession, id = "first", overrides = {}) {
@@ -202,4 +204,22 @@ test("the curator checks stale reviews and publishes immutable versions for sele
   assert.equal(rejected.decision, "reject");
   const final = await call(manager, "inspect_skill_proposals", { findingKey });
   assert.deepEqual(final.group.decisions.map(({ decision }) => decision), ["reject", "reuse", "update", "create"]);
+});
+
+test("background management refuses a curator credential", async (t) => {
+  const { start, root, configuration } = await fixture(t);
+  const { store } = await start();
+  const authority = join(root, "authority.json");
+  const request = join(root, "request.json");
+  await writeFile(authority, JSON.stringify(configuration));
+  await writeFile(request, JSON.stringify({
+    id: "event_fixture_background", taskId: firstTask.id, kind: "maintenance", instruction: "Review the fixture.",
+  }));
+  const execute = promisify(execFile);
+  await assert.rejects(execute(process.execPath, ["packages/management/dist/cli.js", "enqueue", request], {
+    env: { ...process.env, PRAXIS_MCP_CONFIG_FILE: authority, PRAXIS_BACKGROUND_PRINCIPAL_ID: curatorId,
+      PRAXIS_BACKGROUND_HERMES_ORIGIN: "http://127.0.0.1:1/p/background-fixture",
+      PRAXIS_BACKGROUND_HERMES_API_KEY: "fixture-only" },
+  }), { code: 1, stderr: "Background management is unavailable. Check its local configuration and command.\n" });
+  assert.equal(store.management.list().length, 0);
 });

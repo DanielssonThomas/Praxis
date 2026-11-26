@@ -58,3 +58,41 @@ Turn off **Enable engineering memory** in Settings to pause MCP reads and writes
 npm run mcp -- memory export /absolute/path/to/new-export
 npm run mcp -- memory prune 2026-01-01
 ```
+
+## Curated skills
+
+Opt in through the local MCP authority file by adding the following fields. Use a locally owned directory outside worker workspaces and private session directories. Relative paths resolve from the authority file. Set `PRAXIS_AXIOM_ROOT` to the trusted clean checkout used by the manager installer and build that checkout before restarting MCP. [Pinned Axiom setup](hermes-manager.md#install)
+
+```json
+{
+  "skills": {
+    "directory": "./curated-skills",
+    "curatorPrincipalId": "principal_manager"
+  }
+}
+```
+
+The configured curator grant must cover the tasks whose findings it reviews. Each worker can submit findings for existing sessions with `canReport: true` and tasks scoped to both the worker and curator. A separate read-only background principal can use `"canReviewSkills": true` to inspect findings within its task scope. Provide the curator credential only to the reviewing manager.
+
+| Tool | Scope and result |
+| --- | --- |
+| `propose_skill` | Workers submit a `sessionId`, `submissionId`, `findingKey`, `observation` and scoped reproduction `evidence`. Retries with the same submission ID and content reuse the receipt. Similar findings use the same stable key, such as `stale-projection`. |
+| `inspect_skill_proposals` | Curator and read-only reviewers list groups or inspect one `findingKey` for its revision and scoped evidence. The curator can also inspect its recorded decisions. |
+| `list_curated_skills` | Curator and read-only reviewers find published names, descriptions and latest versions. |
+| `request_skill_review` | The curator explicitly queues background maintenance for one `findingKey`, current `revision` and participating `taskId`. Retry with the same values to reuse the work ID. |
+| `decide_skill_proposal` | The curator records a decision for a `findingKey` and `revision` with `sourceInspected` and `rationale`. |
+| `load_curated_skill` | An authorized worker reads the exact `skillId` and `version` selected for its granted `sessionId`. |
+
+The manager applies the canonical Axiom knowledge skill. Inspect the responsible existing document, skill, test or tool, verify the finding, and prefer a correction at that owner. A reuse decision takes a `reference` to an existing `{ skillId, version }` or `{ ownerReference }`. A create or update requires a `draft` containing `skillId`, `description`, generic Markdown `body`, `owner`, `lifecycle` and `verification`. An update also takes `previousVersion`. Reject unverified or redundant proposals and record the reason. [Axiom knowledge workflow at the governing revision](https://github.com/DanielssonThomas/Axiom/blob/96014e73ca14111be83c448898e41559f0f87f88/skills/knowledge/SKILL.md)
+
+The service uses the pinned structural validator for standard `SKILL.md` files and checks for common local paths, private record IDs, credentials and duplicate guidance. The curator verifies general applicability and the underlying evidence before publication. Publication versions and review receipts are immutable in the local `skills.sqlite`. Worker reads contain only published guidance, its version and its digest. A curator refreshes the group after new findings or a competing decision.
+
+Background work runs through the existing `npm run management` runner. The dedicated background profile needs the canonical Axiom knowledge skill and its own read-only MCP credential. Find the requested work ID and its management session using `npm run management -- list`, then inspect that session's receipts with `npm run management -- usage`. Review is explicit and workers submit only evidence intended for the manager.
+
+For Hermes, add `"curatedSkills": [{ "skillId": "verify-projection", "version": 1 }]` to the selected session's grant. The worker loads that version through its native MCP client when the procedure applies. For direct Codex, the trusted caller selects versions and passes the registry's `read` results to the adapter. [Direct Codex skill selection](codex-worker.md#curated-skills)
+
+Verify the native Hermes path after building with `PRAXIS_AXIOM_ROOT` and `PRAXIS_HERMES_BIN` set for the pinned Linux target.
+
+```sh
+node --test tests/runtime/skill-curation.live.mjs
+```
