@@ -68,3 +68,13 @@ npm run test:desktop-ipc-drift
 Generation writes `apps/desktop/src/generated/desktop-ipc.ts`. Check in that output with the Rust change. The check generates into a temporary directory, compares the result with the checked-in file and exits with an error on drift. The drift regression changes a temporary copy and verifies the same comparison rejects it. CI runs both checks on Linux.
 
 The readiness command queries the supervised Node host and returns the running Node version when it is ready. Starting returns a null version and a bounded retry interval in milliseconds. The ready reply omits the retry interval. The Rust interval is a `u16`, which JavaScript represents exactly. Errors use stable codes and redacted messages. The native smoke verifies the displayed state against the running sidecar version.
+
+## Manager and Overview
+
+Open **Manager** and enter the local operator credential. Text in the permanent command bar starts a turn on the configured named Hermes profile. The command shortcuts remain available while replies stream. A disconnected turn keeps the original prompt and turn ID in memory for reconnect. Reopening Manager reads the bounded user and assistant transcript from that same authenticated Hermes session. Related cards follow the Node host's work scope and saved automatic presentation preference.
+
+**Overview** reads registered worker sessions using its own operator unlock. Worker output and usage come from the existing host projection, including unavailable usage and truncated replay markers. The native bridge retains each verified operator credential in memory until that view is locked or Praxis closes.
+
+Run `npm run test:desktop:manager` with the same package and display setup as the native lifecycle smoke. The driver starts a disposable, pinned named Hermes profile with a scripted local provider, observes Manager and Overview in the bundled window, and verifies both views across reopen.
+
+The production Angular bundle loads its stylesheet as a local asset. Tauri supplies the style nonce that Angular uses for component styles in the packaged window.

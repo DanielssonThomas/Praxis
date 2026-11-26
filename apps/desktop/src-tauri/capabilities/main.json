@@ -4,14 +4,11 @@
   "description": "Local host launch status and retry in the primary Praxis window.",
   "windows": ["main"],
   "permissions": [
-    "allow-host-status",
-    "allow-retry-host",
-    "allow-unlock-reports",
-    "allow-lock-reports",
-    "allow-read-reports",
-    "allow-save-report-preferences",
-    "allow-clear-report-history",
-    "allow-read-settings",
-    "allow-save-settings"
+    "allow-host-status", "allow-retry-host",
+    "allow-unlock-manager", "allow-lock-manager", "allow-manager-turn",
+    "allow-unlock-overview", "allow-lock-overview", "allow-read-overview",
+    "allow-unlock-reports", "allow-lock-reports", "allow-read-reports",
+    "allow-save-report-preferences", "allow-clear-report-history",
+    "allow-read-settings", "allow-save-settings"
   ]
 }

@@ -1,1 +1,17 @@
+:host {
+  display: block;
+  animation: overview-enter 180ms ease-out;
+}
+header { display: flex; justify-content: space-between; gap: 0.6rem; align-items: start; }
+praxis-operator-unlock { display: block; margin-block-start: 0.7rem; }
 p { color: var(--muted); }
+.workers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 0.65rem;
+}
+@keyframes overview-enter {
+  from { opacity: 0.3; transform: translateY(0.35rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) { :host { animation: none; } }

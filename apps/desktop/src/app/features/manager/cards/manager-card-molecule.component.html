@@ -1,0 +1,17 @@
+<article [attr.aria-label]="title()">
+  <h3>{{ title() }}</h3>
+  @if (status()) { <p>{{ status() }}</p> }
+  @let item = resource();
+  @if (item.kind !== "unavailable") {
+    <details>
+      <summary>Details</summary>
+      @if (item.kind === "task") {
+        <p>{{ item.task.id }}</p>
+      } @else {
+        <p>{{ item.session.id }}</p>
+        <p>Task {{ item.session.taskId }}</p>
+      }
+    </details>
+  }
+  <button praxisButton type="button" (click)="dismissed.emit()">Dismiss</button>
+</article>
