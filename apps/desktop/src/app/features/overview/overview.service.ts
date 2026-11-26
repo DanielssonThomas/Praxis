@@ -1,12 +1,13 @@
 import { Injectable, inject, signal } from "@angular/core";
 import { DesktopBridge } from "../../native/desktop-bridge.service";
-import type { OverviewProjection, WorkflowError } from "../../native/desktop-bridge.service";
+import type { OverviewProjection, SessionControlRequest, WorkflowError } from "../../native/desktop-bridge.service";
 
 @Injectable({ providedIn: "root" })
 export class OverviewService {
   private readonly native = inject(DesktopBridge);
   private revision = 0;
   private reading = false;
+  private operations = 0;
   readonly projection = signal<OverviewProjection | null>(null);
   readonly expanded = signal<string | null>(null);
   readonly unlocked = signal(false);
@@ -47,7 +48,7 @@ export class OverviewService {
   }
 
   async refresh(): Promise<void> {
-    if (!this.native.available || this.reading || this.unlocking()) return;
+    if (!this.native.available || this.reading || this.unlocking() || this.operations > 0) return;
     const revision = this.revision;
     this.reading = true;
     try {
@@ -64,6 +65,24 @@ export class OverviewService {
 
   expand(id: string): void {
     this.expanded.update((current) => current === id ? null : id);
+  }
+
+  async operate(request: SessionControlRequest) {
+    ++this.operations;
+    const revision = ++this.revision;
+    try {
+      const result = await this.native.controlSession(request);
+      if (result.status === "ok" && revision === this.revision) {
+        this.projection.update((projection) => projection && ({
+          ...projection,
+          panes: projection.panes.map((pane) => pane.session.id === request.sessionId
+            ? { ...pane, control: result.data } : pane),
+        }));
+      }
+      return result;
+    } finally {
+      --this.operations;
+    }
   }
 
   private accept(projection: OverviewProjection): void {

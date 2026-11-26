@@ -1,3 +1,4 @@
+pub(crate) mod activity;
 pub(crate) mod host;
 pub(crate) mod kanban;
 pub(crate) mod manager;
@@ -24,6 +25,12 @@ pub(crate) fn registry() -> Builder<Wry> {
             overview::unlock_overview,
             overview::lock_overview,
             overview::read_overview,
+            overview::control_session,
+            activity::unlock_activity,
+            activity::lock_activity,
+            activity::read_activity,
+            activity::inspect_activity,
+            activity::decide_activity,
             reports::unlock_reports,
             reports::lock_reports,
             reports::read_reports,

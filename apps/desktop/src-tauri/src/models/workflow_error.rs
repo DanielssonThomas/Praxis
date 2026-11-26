@@ -10,6 +10,7 @@ pub(crate) enum WorkflowErrorCode {
     SetupRequired,
     InvalidInput,
     Busy,
+    Conflict,
     Unavailable,
     Interrupted,
 }

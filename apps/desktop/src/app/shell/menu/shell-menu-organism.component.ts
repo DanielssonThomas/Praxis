@@ -1,4 +1,4 @@
-import { Component, ElementRef, input, signal, viewChild } from "@angular/core";
+import { Component, ElementRef, input, output, signal, viewChild } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import { ButtonAtom } from "../../ui/button/button-atom.component";
 import type { ShellView } from "../shell-view.model";
@@ -13,6 +13,9 @@ import type { ShellView } from "../shell-view.model";
 export class ShellMenuOrganism {
   readonly views = input.required<readonly ShellView[]>();
   readonly activeView = input.required<string>();
+  readonly activityAvailable = input(false);
+  readonly activityOpened = input(false);
+  readonly activityToggled = output<void>();
   protected readonly open = signal(false);
   private readonly toggle = viewChild.required("toggle", { read: ElementRef<HTMLButtonElement> });
 

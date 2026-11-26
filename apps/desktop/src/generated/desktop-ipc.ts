@@ -18,6 +18,12 @@ export const commands = {
 	unlockOverview: (token: string, options?: InvokeOptions) => typedError<OverviewProjection_Serialize, WorkflowError>(__TAURI_INVOKE("unlock_overview", { token }, options)),
 	lockOverview: (options?: InvokeOptions) => __TAURI_INVOKE<void>("lock_overview", undefined, options),
 	readOverview: (options?: InvokeOptions) => typedError<OverviewProjection_Serialize, WorkflowError>(__TAURI_INVOKE("read_overview", undefined, options)),
+	controlSession: (request: SessionControlRequest, options?: InvokeOptions) => typedError<SessionControl, WorkflowError>(__TAURI_INVOKE("control_session", { request }, options)),
+	unlockActivity: (token: string, options?: InvokeOptions) => typedError<ActivityCard[], WorkflowError>(__TAURI_INVOKE("unlock_activity", { token }, options)),
+	lockActivity: (options?: InvokeOptions) => __TAURI_INVOKE<void>("lock_activity", undefined, options),
+	readActivity: (options?: InvokeOptions) => typedError<ActivityCard[], WorkflowError>(__TAURI_INVOKE("read_activity", undefined, options)),
+	inspectActivity: (request: InspectActivityRequest, options?: InvokeOptions) => typedError<ActivityCard, WorkflowError>(__TAURI_INVOKE("inspect_activity", { request }, options)),
+	decideActivity: (request: DecideActivityRequest, options?: InvokeOptions) => typedError<ActivityCard, WorkflowError>(__TAURI_INVOKE("decide_activity", { request }, options)),
 	unlockReports: (request: ReportUnlock, options?: InvokeOptions) => typedError<ReportResult_Serialize, WorkflowError>(__TAURI_INVOKE("unlock_reports", { request }, options)),
 	lockReports: (options?: InvokeOptions) => __TAURI_INVOKE<void>("lock_reports", undefined, options),
 	readReports: (days: number, options?: InvokeOptions) => typedError<ReportResult_Serialize, WorkflowError>(__TAURI_INVOKE("read_reports", { days }, options)),
@@ -28,6 +34,31 @@ export const commands = {
 };
 
 /* Types */
+export type ActivityAction = {
+	kind: string,
+	target: ActivityTarget,
+};
+
+export type ActivityCard = {
+	requestId: string,
+	actorId: string,
+	action: ActivityAction,
+	phase: ActivityPhase,
+};
+
+export type ActivityPhase = { state: "processing" } | { state: "attention"; approval: ApprovalReference; expiresAt: string } | { state: "resolved"; native: SessionSnapshot } | { state: "denied" } | { state: "expired"; reason: string } | { state: "invalidated"; reason: string } | { state: "refused"; reason: string } | { state: "uncertain"; reason: string } | { state: "escalated"; reason: string };
+
+export type ActivityTarget = {
+	kind: ActivityTargetKind,
+	id: string,
+};
+
+export type ActivityTargetKind = "session" | "task";
+
+export type ApprovalReference = {
+	id: string,
+};
+
 export type BudgetPreferences = BudgetPreferences_Serialize | BudgetPreferences_Deserialize;
 
 export type BudgetPreferences_Deserialize = {
@@ -40,9 +71,17 @@ export type BudgetPreferences_Serialize = {
 	maxTaskUsd: number | null,
 };
 
+export type DecideActivityRequest = {
+	requestId: string,
+	approvalId: string,
+	decision: OperatorDecision,
+};
+
 export type DisplayPreferences = {
 	autoPresent: boolean,
 };
+
+export type GuidanceReceipt = "none" | "pending" | "uncertain" | "delivered" | "recorded";
 
 export type HostStage = "starting" | "ready";
 
@@ -58,6 +97,10 @@ export type HostStatus_Serialize = {
 	stage: HostStage,
 	nodeVersion: string | null,
 	retryAfterMs?: number,
+};
+
+export type InspectActivityRequest = {
+	requestId: string,
 };
 
 export type IpcError = {
@@ -181,6 +224,8 @@ export type MemoryPreferences = {
 	enabled: boolean,
 };
 
+export type OperatorDecision = "approve" | "deny";
+
 export type OverviewAssociation = OverviewAssociation_Serialize | OverviewAssociation_Deserialize;
 
 export type OverviewAssociation_Deserialize = {
@@ -201,6 +246,7 @@ export type OverviewPane_Deserialize = {
 	ticket: string,
 	highlighted: boolean,
 	runtime: OverviewRuntime_Deserialize,
+	control: SessionControl,
 	usageNotice?: string | null,
 };
 
@@ -210,6 +256,7 @@ export type OverviewPane_Serialize = {
 	ticket: string,
 	highlighted: boolean,
 	runtime: OverviewRuntime_Serialize,
+	control: SessionControl,
 	usageNotice: string | null,
 };
 
@@ -353,6 +400,18 @@ export type ReportUnlock = {
 
 export type ResourceKind = "task" | "session";
 
+export type SessionControl = {
+	mode: SessionControlMode,
+	canTakeover: boolean,
+	canGuide: boolean,
+	canReturn: boolean,
+	guidance: GuidanceReceipt,
+};
+
+export type SessionControlMode = "read_only" | "manual" | "automated_write";
+
+export type SessionControlRequest = { operation: "takeover"; sessionId: string } | { operation: "guide"; sessionId: string; text: string } | { operation: "return"; sessionId: string };
+
 export type SessionOutput = { availability: "available"; text: string; truncated: boolean } | { availability: "unavailable"; reason: string };
 
 export type SessionSnapshot = {
@@ -402,7 +461,7 @@ export type WorkflowError = {
 	message: string,
 };
 
-export type WorkflowErrorCode = "locked" | "denied" | "setup_required" | "invalid_input" | "busy" | "unavailable" | "interrupted";
+export type WorkflowErrorCode = "locked" | "denied" | "setup_required" | "invalid_input" | "busy" | "conflict" | "unavailable" | "interrupted";
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

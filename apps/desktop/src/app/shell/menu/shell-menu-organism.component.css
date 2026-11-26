@@ -11,6 +11,7 @@ header {
 }
 
 .header-row { min-block-size: 3.5rem; justify-content: space-between; }
+.actions { display: flex; gap: 0.5rem; }
 .brand { font-weight: 700; letter-spacing: -0.025em; }
 nav { flex-wrap: wrap; padding-block-end: 0.65rem; }
 
