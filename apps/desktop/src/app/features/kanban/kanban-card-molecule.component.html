@@ -1,29 +1,18 @@
 <article [attr.data-native-id]="task().nativeId">
-  <h3>{{ task().task.title }}</h3>
-  <p class="identity">
-    {{ task().nativeId }} @if (task().assignee; as assignee) { <span>· {{ assignee }}</span> }
+  @let item = task();
+  @let id = triggerId(item.nativeId);
+  <p class="identity" [id]="id + '-identity'">{{ item.nativeId }}</p>
+  <h3>
+    <button praxisButton type="button" [id]="id" aria-haspopup="dialog" aria-controls="kanban-task-details"
+      [attr.aria-describedby]="id + '-identity ' + id + '-summary'"
+      (click)="opened.emit(item.nativeId)">{{ item.task.title }}</button>
+  </h3>
+  <p class="summary" [id]="id + '-summary'">
+    <span>{{ item.assignee || "Unassigned" }}</span>
+    @if (item.links[0]; as issue) {
+      <span class="issue">{{ issue.repository }}#{{ issue.number }}
+        @if (item.links.length > 1) { <span>+{{ item.links.length - 1 }} more</span> }
+      </span>
+    }
   </p>
-
-  @if (task().links.length) {
-    <ul aria-label="Linked GitHub issues">
-      @for (issue of task().links; track issue.repository + '#' + issue.number) {
-        <li>
-          <button praxisButton type="button" class="issue" [disabled]="busy()"
-            [attr.aria-label]="'Open ' + issue.repository + '#' + issue.number + ' in the browser'"
-            (click)="open(issue)">{{ issue.repository }}#{{ issue.number }}</button>
-        </li>
-      }
-    </ul>
-  }
-
-  @if (canLink()) {
-    <form [attr.aria-label]="'Link a GitHub issue to ' + task().task.title" (submit)="submit($event, issue)">
-      <label>
-        GitHub issue
-        <input #issue type="text" name="issue" placeholder="owner/repo#42" required maxlength="158"
-          spellcheck="false" autocapitalize="none" aria-describedby="kanban-status">
-      </label>
-      <button praxisButton type="submit" [disabled]="busy()">Link issue</button>
-    </form>
-  }
 </article>
