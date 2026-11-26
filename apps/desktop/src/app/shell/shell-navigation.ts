@@ -6,6 +6,7 @@ export const views = [
   { id: "overview", label: "Overview", short: "o", section: "workspace" },
   { id: "kanban", label: "Kanban", short: "k", section: "workspace" },
   { id: "reports", label: "Reports", short: "r", section: "workspace" },
+  { id: "setup", label: "Setup", short: "su", section: "configuration" },
   { id: "settings", label: "Settings", short: "s", section: "configuration" },
 ] as const satisfies readonly ShellView[];
 

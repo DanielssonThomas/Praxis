@@ -3,6 +3,7 @@ import { ManagerTemplate } from "../features/manager";
 import { OverviewTemplate } from "../features/overview";
 import { KanbanTemplate } from "../features/kanban";
 import { ReportsTemplate } from "../features/reports";
+import { SetupTemplate } from "../features/setup";
 import { SettingsTemplate } from "../features/settings";
 import { managerView, views } from "./shell-navigation";
 
@@ -11,6 +12,7 @@ const pages = {
   overview: OverviewTemplate,
   kanban: KanbanTemplate,
   reports: ReportsTemplate,
+  setup: SetupTemplate,
   settings: SettingsTemplate,
 };
 

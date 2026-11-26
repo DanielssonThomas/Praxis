@@ -1,0 +1,77 @@
+<section aria-labelledby="setup-step-heading">
+  <nav aria-label="Setup steps">
+    <ol class="steps">
+      @for (item of steps; track item.label) {
+        <li>
+          <button praxisButton type="button" [attr.aria-current]="step() === $index ? 'step' : null"
+            (click)="selectStep($index, chapter)">
+            <span class="step-number" aria-hidden="true">{{ $index + 1 }}</span>
+            <span>{{ item.label }}</span>
+          </button>
+        </li>
+      }
+    </ol>
+  </nav>
+
+  <h2 #chapter id="setup-step-heading" tabindex="-1">{{ steps[step()].heading }}</h2>
+
+  @switch (step()) {
+    @case (0) {
+      <p>Praxis starts its bundled Node.js sidecar when the desktop opens.</p>
+      <div class="host-check">
+        <p #status id="setup-host-status" role="status" tabindex="-1">
+          @if (!host.native) {
+            Open the Linux x64 Praxis desktop package to check the local host.
+          } @else if (host.runtimeVersion(); as version) {
+            Local Praxis host ready. <span>Node.js {{ version }}</span>
+          } @else {
+            {{ host.status() }}
+          }
+        </p>
+        @if (host.canRetry()) {
+          <p>Check the desktop installation, then retry the local host.</p>
+          <button praxisButton type="button" [attr.aria-disabled]="host.retrying() || null"
+            (click)="retryHost(status)">{{ host.retrying() ? 'Retrying local host…' : 'Retry local host' }}</button>
+        }
+      </div>
+    }
+    @case (1) {
+      <p>Use Hermes Agent 0.23.3 and a named profile. The installed default is <code>praxis-manager</code>.</p>
+      <p>Set the profile name in Settings. It must match the named gateway URL used to launch Praxis.</p>
+      <a routerLink="/settings" class="action">Open Settings</a>
+      <details>
+        <summary>Install and connect the default manager</summary>
+        <p>Build Praxis and the pinned Axiom revision <code>96014e73ca14111be83c448898e41559f0f87f88</code>
+          as described in <code>docs/hermes-manager.md</code>. Run this command from the Praxis checkout.</p>
+        <pre><code>node scripts/install-hermes-manager.mjs \
+  --hermes-bin /path/to/hermes \
+  --hermes-home /path/to/dedicated-hermes \
+  --axiom-root /path/to/built-axiom</code></pre>
+        <p>Configure the model and scoped Praxis MCP access in the named profile using the same guide.
+          Start the Hermes gateway from the dedicated root.</p>
+        <p>In the desktop launch environment, set <code>PRAXIS_MCP_CONFIG_FILE</code> to the same authority file
+          used by Praxis MCP. Set <code>PRAXIS_HERMES_ORIGIN</code> to the local gateway URL for the named profile
+          (for example <code>http://127.0.0.1:8642/p/praxis-manager</code>).
+          Set <code>PRAXIS_HERMES_API_KEY</code> to that profile's API bearer and restart Praxis.</p>
+      </details>
+    }
+    @case (2) {
+      <p>Generate a separate operator token. Set its lowercase SHA-256 hex digest as
+        <code>PRAXIS_OPERATOR_TOKEN_DIGEST</code> in the desktop launch environment.</p>
+      <p>Restart Praxis and enter the original token in Manager to authenticate and read the named Hermes transcript.</p>
+      <p>See <code>docs/approvals.md</code> and <code>docs/manager-foreground.md</code> for the full steps.</p>
+    }
+  }
+
+  <footer>
+    @if (step() > 0) {
+      <button praxisButton type="button" (click)="selectStep(step() - 1, chapter)">Back</button>
+    }
+    @if (step() < steps.length - 1) {
+      <button praxisButton type="button" class="primary"
+        (click)="selectStep(step() + 1, chapter)">Continue</button>
+    } @else {
+      <a routerLink="/manager" class="action primary">Open Manager</a>
+    }
+  </footer>
+</section>
