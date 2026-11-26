@@ -20,37 +20,35 @@
     </button>
   </footer>
   <div class="details" [id]="'details-' + pane().session.id" [hidden]="!expanded()">
-    <div class="details-grid">
-      <section>
-        <h3>Session details</h3>
-        <dl>
-          @if (pane().ticket !== pane().task.id) {
-            <div><dt>Task</dt><dd class="identity">{{ pane().task.id }}</dd></div>
-          }
-          <div><dt>Session</dt><dd class="identity">{{ pane().session.id }}</dd></div>
-        </dl>
-      </section>
-      <section>
-        <h3>Session usage</h3>
-        @let measurement = usage();
-        @if (measurement.metering === "unknown") {
-          <p>{{ measurement.reason }}</p>
-        } @else {
-          <dl>
-            @if (measurement.inputTokens != null) {
-              <div><dt>Input tokens</dt><dd>{{ measurement.inputTokens.toLocaleString() }}</dd></div>
-            }
-            @if (measurement.outputTokens != null) {
-              <div><dt>Output tokens</dt><dd>{{ measurement.outputTokens.toLocaleString() }}</dd></div>
-            }
-            @if (measurement.cost?.amount != null) {
-              <div><dt>Cost</dt><dd>{{ measurement.cost?.amount }} {{ measurement.cost?.currency }}</dd></div>
-            }
-          </dl>
+    <section>
+      <h3>Session details</h3>
+      <dl>
+        @if (pane().ticket !== pane().task.id) {
+          <div><dt>Task</dt><dd class="identity">{{ pane().task.id }}</dd></div>
         }
-        @if (pane().usageNotice) { <p class="usage-notice">{{ pane().usageNotice }}</p> }
-      </section>
-    </div>
-    <praxis-session-control [sessionId]="pane().session.id" [control]="pane().control" />
+        <div><dt>Session</dt><dd class="identity">{{ pane().session.id }}</dd></div>
+      </dl>
+      <praxis-session-control [sessionId]="pane().session.id" [control]="pane().control" />
+    </section>
+    <section>
+      <h3>Session usage</h3>
+      @let measurement = usage();
+      @if (measurement.metering === "unknown") {
+        <p>{{ measurement.reason }}</p>
+      } @else {
+        <dl>
+          @if (measurement.inputTokens != null) {
+            <div><dt>Input tokens</dt><dd>{{ measurement.inputTokens.toLocaleString() }}</dd></div>
+          }
+          @if (measurement.outputTokens != null) {
+            <div><dt>Output tokens</dt><dd>{{ measurement.outputTokens.toLocaleString() }}</dd></div>
+          }
+          @if (measurement.cost?.amount != null) {
+            <div><dt>Cost</dt><dd>{{ measurement.cost?.amount }} {{ measurement.cost?.currency }}</dd></div>
+          }
+        </dl>
+      }
+      @if (pane().usageNotice) { <p class="usage-notice">{{ pane().usageNotice }}</p> }
+    </section>
   </div>
 </article>

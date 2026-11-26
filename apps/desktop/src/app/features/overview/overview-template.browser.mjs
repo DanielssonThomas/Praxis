@@ -181,8 +181,16 @@ test("desktop gives one loaded worker prominence and preserves its focused sessi
   await screenshot(page, "overview-output-end");
 
   await expandControl.click();
-  await first.getByRole("button", { name: "Send guidance" }).waitFor();
+  const guide = first.getByRole("button", { name: "Send guidance" });
+  await guide.waitFor();
   await first.getByRole("button", { name: "Return control" }).waitFor();
+  await page.setViewportSize({ width: 1120, height: 760 });
+  await page.locator("main").evaluate((node) => { node.scrollTop = 0; });
+  const [guideBox, workspace] = await Promise.all([guide.boundingBox(), page.locator("main").boundingBox()]);
+  assert.ok(guideBox.y + guideBox.height <= workspace.y + workspace.height,
+    "manual guidance remains visible at the default packaged window size");
+  await screenshot(page, "overview-guide-desktop");
+  await page.setViewportSize({ width: 1280, height: 800 });
   assert.deepEqual(await page.evaluate(() => window.overviewFixture.controls), [
     { operation: "takeover", sessionId: projection(4).panes[0].session.id },
   ]);
