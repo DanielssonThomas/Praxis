@@ -35,7 +35,7 @@ async function deadline(promise, message) {
   }
 }
 
-test("the native pinned Codex worker delivers the brief and policy, bounds output, completes and stops exactly", { timeout: 60_000 }, async (t) => {
+test("the pinned Codex worker reads its workspace, delivers policy and observes the scoped lifecycle", { timeout: 60_000 }, async (t) => {
   assert.ok(process.env.PRAXIS_CODEX_BIN && process.env.PRAXIS_AXIOM_ROOT, "Set PRAXIS_CODEX_BIN and PRAXIS_AXIOM_ROOT");
   const { CodexExecutor } = await import("../../packages/codex-runtime/dist/index.js");
   const { runtimeOutputLimit } = await import("@praxis/contracts");
@@ -93,11 +93,14 @@ test("the native pinned Codex worker delivers the brief and policy, bounds outpu
         return;
       }
       const textItems = Array.isArray(toolResult.output) ? toolResult.output.map(({ text }) => text) : [toolResult.output];
-      const fixtureLine = textItems.find((text) => typeof text === "string" && text.trimEnd() === marker)?.trimEnd();
-      assert.ok(fixtureLine,
-        "The native workspace command must exit successfully and return the exact staged marker as a whole line.");
+      const fixtureLine = textItems.find((text) => text === marker || text === fixture);
+      const missingHost = textItems.some((text) => typeof text === "string" && text.includes("codex-code-mode-host")
+        && /code.mode.{0,60}(unavailable|not found|missing)/i.test(text));
+      assert.ok(fixtureLine, missingHost
+        ? "Code Mode could not find codex-code-mode-host. Set PRAXIS_CODEX_BIN to bin/codex in the complete pinned package."
+        : "The native workspace command must exit successfully and return the exact staged marker as a whole line.");
       const id = "response-report";
-      const report = padding + fixtureLine;
+      const report = padding + fixtureLine.replace(/\n$/, "");
       const message = { id: "message-report", type: "message", role: "assistant", status: "completed",
         content: [{ type: "output_text", text: report, annotations: [] }] };
       response.write(frame({ type: "response.created", response: { id } }));

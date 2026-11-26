@@ -1,6 +1,6 @@
 # Direct Codex workers
 
-The `@praxis/codex-runtime` package runs one ordinary `codex exec --json` process for each assignment. The supported target is Codex CLI 0.172.0-alpha.2 on Linux x64. `capabilities()` reports the observed binary version and platform. A mismatched host or a brief requiring an unavailable capability is refused before the worker starts.
+The `@praxis/codex-runtime` package runs one ordinary `codex exec --json` process for each assignment. The supported target is the complete Codex CLI 0.172.0-alpha.2 distribution on Linux x64. `capabilities()` reports the observed binary version and platform. A mismatched host or a brief requiring an unavailable capability is refused before the worker starts.
 
 ## Local API
 
@@ -16,11 +16,13 @@ Assignment references belong to the running executor instance. Resume, compactio
 
 ## Verify
 
-The scripted fixture uses a real Codex process with an isolated loopback Responses provider that needs no credentials.
+Extract `codex-package-x86_64-unknown-linux-musl.tar.gz` from the pinned release and keep its directory layout intact. Use the extracted `bin/codex` for `PRAXIS_CODEX_BIN` and device authorization. Code Mode loads its companion `codex-code-mode-host` from the distribution. [Pinned Codex release](https://github.com/openai/codex/releases/tag/rust-v0.172.0-alpha.2)
+
+The scripted fixture uses a real Codex process with an isolated loopback Responses provider that needs no credentials. It verifies a native Code Mode read of a scoped workspace file.
 
 ```sh
 npm run build
-PRAXIS_CODEX_BIN=/absolute/path/to/codex \
+PRAXIS_CODEX_BIN=/absolute/path/to/extracted-package/bin/codex \
 PRAXIS_AXIOM_ROOT=/absolute/path/to/pinned-built-axiom \
 npm run test:codex:live
 ```
@@ -37,14 +39,14 @@ Complete the pinned CLI's native device authorization in the dedicated home. The
 
 ```sh
 CODEX_HOME=/absolute/path/to/authorized-account-home \
-  /absolute/path/to/codex login --device-auth
+  /absolute/path/to/extracted-package/bin/codex login --device-auth
 ```
 
 From the built Praxis checkout, select the same home and a model the account is entitled to use. Keep the configured proxy and certificate environment in place. The probe checks for the login file before starting the worker, stages the native login and optional configuration in a temporary profile, verifies the scoped file result, and records host and outcome metadata.
 
 ```sh
 PRAXIS_RUN_CODEX_ACCOUNT=1 \
-PRAXIS_CODEX_BIN=/absolute/path/to/codex \
+PRAXIS_CODEX_BIN=/absolute/path/to/extracted-package/bin/codex \
 PRAXIS_AXIOM_ROOT=/absolute/path/to/pinned-built-axiom \
 PRAXIS_CODEX_ACCOUNT_HOME=/absolute/path/to/authorized-account-home \
 PRAXIS_CODEX_MODEL=entitled-model \
