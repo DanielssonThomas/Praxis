@@ -87,6 +87,13 @@ function overlaps(left: string, right: string): boolean {
   return within(left, right) || within(right, left);
 }
 
+export async function requireExternalCodexControls(roots: readonly string[], paths: readonly string[]): Promise<void> {
+  const physical = await Promise.all(paths.map((path) => realpath(path)));
+  if ([...paths, ...physical].some((path) => roots.some((root) => within(root, resolve(path))))) {
+    throw new Error("Keep local authority and the operational database outside the source and worker roots.");
+  }
+}
+
 export async function resolveCodexEnrollment(config: CodexDelegationConfig, enrollment: CodexEnrollment) {
   const [source, axiomRoot, program, profileRoot] = await Promise.all([
     realpath(enrollment.authority.root), realpath(config.axiomRoot), realpath(config.program), realpath(config.profile.root),

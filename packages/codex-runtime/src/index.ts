@@ -38,6 +38,7 @@ export interface CodexExecutorOptions {
   axiomRoot: string;
   root: string;
   model: string;
+  workspaceOnly?: boolean;
   prepareWorkspace?: (scope: Staging) => Promise<void>;
   prepareProfile?: (scope: Staging) => Promise<void>;
   selectedSkills?: (scope: Pick<Staging, "task" | "session" | "signal">) => Promise<readonly CodexSkillResource[]>;
@@ -164,7 +165,7 @@ export class CodexExecutor implements WorkerExecutor {
         schemaVersion: contractVersion, taskId: task.id, sessionId: session.id, runtime: "codex", runId: `worker_${randomUUID()}`,
       });
       run = new CodexRun(profile, this.#options.model, `Axiom scoped task brief supplied by the caller:\n${JSON.stringify(brief)}`,
-        deadline - performance.now());
+        deadline - performance.now(), this.#options.workspaceOnly);
       await run.started;
       const closed = run.finished.then(async () => {
         limits.active--;

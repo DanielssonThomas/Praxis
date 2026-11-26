@@ -12,7 +12,7 @@ import type { McpGrant } from "@praxis/mcp";
 import { OperationalStore } from "@praxis/state";
 import {
   checkoutMatches, cloneCodexCheckout, codexDigest, codexProfileIdentity, readCodexDelegation,
-  resolveCodexEnrollment, stageCodexProfile, workerProcessEnvironment,
+  requireExternalCodexControls, resolveCodexEnrollment, stageCodexProfile, workerProcessEnvironment,
 } from "./codex-delegation-config.js";
 import { CodexObservationJournal, terminalObservation, visibleCodexObservation } from "./codex-delegation-journal.js";
 import type { CodexObservationRecord } from "./codex-delegation-journal.js";
@@ -145,6 +145,7 @@ export class CodexDelegationService {
     let passedFinalAuthorization = false;
     const executor = new CodexExecutor({
       ...executorOptions,
+      workspaceOnly: true,
       prepareWorkspace: async ({ workspace, signal }) => {
         await cloneCodexCheckout(enrollment.authority.root, workspace, enrollment.sourceRevision, signal);
         if (await policy.verifyStaging(admission.admissionId, workspace) !== "inserted") throw invalidated();
@@ -265,6 +266,8 @@ export class CodexDelegationService {
       throw invalidated();
     }
     const resources = await resolveCodexEnrollment(config, enrollment);
+    await requireExternalCodexControls([resources.enrollment.authority.root, resources.workerRoot],
+      [this.configFile, this.mcpFile, this.database]);
     if (!await checkoutMatches(resources.enrollment.authority.root, enrollment.sourceRevision, requireClean)) throw invalidated();
     return resources;
   }

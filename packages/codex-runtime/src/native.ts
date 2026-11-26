@@ -9,6 +9,12 @@ const stdoutLimit = 8 * 1024 * 1024;
 const nativeEvent = z.object({ type: z.string(), item: z.unknown().optional(), usage: z.unknown().optional() });
 const message = z.object({ type: z.literal("agent_message"), text: z.string() });
 const usageSchema = z.object({ input_tokens: z.int().nonnegative(), output_tokens: z.int().nonnegative() });
+const workspaceOnlyConfig = [
+  "-c", "sandbox_workspace_write.exclude_slash_tmp=true",
+  "-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+  "-c", "sandbox_workspace_write.writable_roots=[]",
+  "-c", "sandbox_workspace_write.network_access=false",
+];
 type NativeUsage = z.infer<typeof usageSchema>;
 type StopReason = "operator" | "deadline" | "output";
 
@@ -27,8 +33,9 @@ export class CodexRun {
   #terminal?: "completed" | "failed";
   #malformed = false;
 
-  constructor(profile: AxiomProfile, model: string, prompt: string, remainingMs: number) {
+  constructor(profile: AxiomProfile, model: string, prompt: string, remainingMs: number, workspaceOnly = false) {
     const child = spawn(profile.program, [
+      ...(workspaceOnly ? workspaceOnlyConfig : []),
       "--ask-for-approval", "never", "exec", "--sandbox", "workspace-write", "--ephemeral",
       "--skip-git-repo-check", "--color", "never", "--json", "--model", model, "-",
     ], {
