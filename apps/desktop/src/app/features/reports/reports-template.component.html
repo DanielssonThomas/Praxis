@@ -38,16 +38,12 @@
     <div class="actions">
       <button praxisButton type="button" data-report-export
         [disabled]="!exportAvailable()"
-        [attr.aria-describedby]="unsavedMetrics() && current.preferences.allowExport ? 'report-save-first' : null"
         (click)="exportReport()">Export JSON</button>
       <button praxisButton #clear type="button" data-report-clear aria-controls="report-clear-confirmation"
         [attr.aria-expanded]="confirmingClear()" [disabled]="busy() || !current.preferences.allowClearHistory"
         (click)="confirmingClear.set(true)">Clear report history</button>
     </div>
   </div>
-  @if (unsavedMetrics() && current.preferences.allowExport) {
-    <p class="save-first" id="report-save-first">Save visible metrics before exporting.</p>
-  }
   <div id="report-clear-confirmation" class="confirmation" role="group" aria-label="Confirm clearing report history"
     [hidden]="!confirmingClear() || !current.preferences.allowClearHistory" (keydown.escape)="keepHistory($event)">
     <p>Previously dated observations will be hidden from reports. The operational audit will be kept.</p>

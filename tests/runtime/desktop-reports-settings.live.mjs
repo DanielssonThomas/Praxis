@@ -202,10 +202,9 @@ test("packaged Reports charts operational values, scopes export, and clears hist
   assert.equal(configured.retentionDays, 7);
   assert.equal(configured.visibleMetrics.includes("interventions"), false);
   assert.equal(configured.allowExport, true);
-  const preview = await app.element(`${preferences} [name=metric_interventions]`);
+  const preview = await app.element(`${preferences} [name=metric_taskMinutes]`);
   await preview.click();
-  assert.equal(await app.execute("return document.querySelector('[data-report-export]').disabled"), true);
-  await preview.click();
+  assert.equal(await app.execute("return document.querySelector('[data-report-export]').disabled"), false);
   await (await app.element("[data-report-export]")).click();
   const exportFile = await eventually(() => readFile(join(downloads, "praxis-report.json"), "utf8").catch(() => false),
     "The packaged export never reached the Downloads folder.");
@@ -215,8 +214,11 @@ test("packaged Reports charts operational values, scopes export, and clears hist
   assert.equal(row.metrics.tokens, 20);
   assert.equal(row.metrics.costUsd, 0);
   assert.equal("interventions" in row.metrics, false);
+  assert.equal("taskMinutes" in row.metrics, false);
+  assert.equal((await readSettings(settings)).reports.visibleMetrics.includes("taskMinutes"), true);
   assert.ok(report.buckets.some(({ metrics }) => metrics.tokens === null));
   await capture(app, "reports-export-narrow.png");
+  await preview.click();
 
   async function changeCollection(enabled) {
     await (await app.element(`${preferences} [name=collectionEnabled]`)).click();

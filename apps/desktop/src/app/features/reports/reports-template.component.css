@@ -47,7 +47,6 @@ p { color: var(--muted); }
 
 .customization h2 { margin: 0 0 0.65rem; font-size: 1.05rem; }
 .confirmation p { margin-block-end: 0.65rem; }
-.save-first { margin-block: -0.4rem 0.85rem; font-size: 0.8rem; }
 
 .metrics {
   display: grid;

@@ -29,19 +29,14 @@ export class ReportsTemplate {
   protected readonly confirmingClear = signal(false);
   protected readonly draftMetrics = signal<ReportMetric[] | null>(null);
 
-  private readonly savedMetrics = computed(() => this.report()?.preferences.visibleMetrics ?? []);
+  private readonly visibleMetrics = computed(() => this.draftMetrics() ?? this.report()?.preferences.visibleMetrics ?? []);
   protected readonly activeMetrics = computed(() => {
-    const visible = this.draftMetrics() ?? this.savedMetrics();
+    const visible = this.visibleMetrics();
     return reportMetrics.filter(({ metric }) => visible.includes(metric));
-  });
-  protected readonly unsavedMetrics = computed(() => {
-    const draft = this.draftMetrics();
-    const saved = this.savedMetrics();
-    return draft !== null && (draft.length !== saved.length || draft.some((metric) => !saved.includes(metric)));
   });
   protected readonly exportAvailable = computed(() => {
     const preferences = this.report()?.preferences;
-    return !!preferences?.allowExport && preferences.collectionEnabled && !this.busy() && !this.unsavedMetrics();
+    return !!preferences?.allowExport && preferences.collectionEnabled && !this.busy();
   });
 
   constructor() {
@@ -114,7 +109,7 @@ export class ReportsTemplate {
   protected exportReport(): void {
     const report = this.report();
     if (!report || !this.exportAvailable()) return;
-    const metrics = report.preferences.visibleMetrics;
+    const metrics = this.visibleMetrics();
     const buckets = report.buckets.map(({ day, metrics: values }) => ({
       day, metrics: Object.fromEntries(metrics.map((metric) => [metric, values[metric] ?? null])),
     }));
