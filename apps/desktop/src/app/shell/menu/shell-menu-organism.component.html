@@ -1,14 +1,20 @@
 <header>
   <div class="header-row">
     <span class="brand">Praxis</span>
-    <button
-      praxisButton
-      #toggle
-      type="button"
-      aria-controls="main-navigation"
-      [attr.aria-expanded]="open()"
-      (click)="open.set(!open())"
-    >Menu</button>
+    <div class="actions">
+      @if (activityAvailable()) {
+        <button praxisButton type="button" id="activity-toggle" aria-controls="desktop-activity"
+          [attr.aria-expanded]="activityOpened()" (click)="activityToggled.emit()">Activity</button>
+      }
+      <button
+        praxisButton
+        #toggle
+        type="button"
+        aria-controls="main-navigation"
+        [attr.aria-expanded]="open()"
+        (click)="open.set(!open())"
+      >Menu</button>
+    </div>
   </div>
   <nav id="main-navigation" aria-label="Main navigation" [hidden]="!open()">
     @for (view of views(); track view.id) {

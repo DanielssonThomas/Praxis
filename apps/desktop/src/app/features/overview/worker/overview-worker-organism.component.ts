@@ -1,10 +1,11 @@
 import { Component, computed, input, output } from "@angular/core";
 import type { OverviewPane } from "../../../native/desktop-bridge.service";
 import { ButtonAtom } from "../../../ui/button/button-atom.component";
+import { SessionControlMolecule } from "../control/session-control-molecule.component";
 
 @Component({
   selector: "praxis-overview-worker",
-  imports: [ButtonAtom],
+  imports: [ButtonAtom, SessionControlMolecule],
   templateUrl: "./overview-worker-organism.component.html",
   styleUrl: "./overview-worker-organism.component.css",
   host: { "[attr.data-expanded]": "expanded()" },

@@ -4,7 +4,8 @@ import { commands } from "../../generated/desktop-ipc";
 import type { ManagerFrame, ManagerTurnRequest } from "../../generated/desktop-ipc";
 
 export type {
-  ManagerFrame, ManagerMessage, ManagerResource, OverviewPane, OverviewProjection,
+  ActivityCard, DecideActivityRequest, ManagerFrame, ManagerMessage, ManagerResource,
+  OperatorDecision, OverviewPane, OverviewProjection, SessionControl, SessionControlRequest,
   UsageMeasurement, WorkflowError,
 } from "../../generated/desktop-ipc";
 
@@ -18,6 +19,12 @@ export class DesktopBridge {
   readonly unlockOverview = commands.unlockOverview;
   readonly lockOverview = commands.lockOverview;
   readonly readOverview = commands.readOverview;
+  readonly controlSession = commands.controlSession;
+  readonly unlockActivity = commands.unlockActivity;
+  readonly lockActivity = commands.lockActivity;
+  readonly readActivity = commands.readActivity;
+  readonly inspectActivity = commands.inspectActivity;
+  readonly decideActivity = commands.decideActivity;
 
   managerTurn(request: ManagerTurnRequest, onFrame: (frame: ManagerFrame) => void) {
     const output = new Channel<ManagerFrame>();

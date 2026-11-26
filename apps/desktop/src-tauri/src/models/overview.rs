@@ -1,4 +1,5 @@
 use crate::models::presentation::{SessionSnapshot, SessionSummary, TaskSummary, UsageMeasurement};
+use crate::models::session_control::SessionControl;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
@@ -16,6 +17,7 @@ pub(crate) struct OverviewPane {
     ticket: String,
     highlighted: bool,
     runtime: OverviewRuntime,
+    control: SessionControl,
     usage_notice: Option<String>,
 }
 

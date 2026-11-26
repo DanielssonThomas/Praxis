@@ -1,0 +1,18 @@
+<article [attr.data-request-id]="card().requestId" [attr.data-state]="card().phase.state">
+  <h3>{{ title() }}</h3>
+  <p>{{ label() }}</p>
+  <p>Requested by {{ card().actorId }}</p>
+  @if (detail()) { <p>{{ detail() }}</p> }
+  @switch (card().phase.state) {
+    @case ("processing") {
+      <button praxisButton type="button" data-action="inspect" [disabled]="busy()"
+        (click)="inspectRequested.emit(card().requestId)">Inspect</button>
+    }
+    @case ("attention") {
+      <div class="actions">
+        <button praxisButton type="button" data-action="approve" [disabled]="busy()" (click)="decide('approve')">Approve once</button>
+        <button praxisButton type="button" data-action="deny" [disabled]="busy()" (click)="decide('deny')">Deny</button>
+      </div>
+    }
+  }
+</article>

@@ -1,8 +1,11 @@
-<praxis-shell-menu [views]="views" [activeView]="navigation.view().id" />
+<praxis-shell-menu [views]="views" [activeView]="navigation.view().id"
+  [activityAvailable]="activity.supported" [activityOpened]="activity.opened()"
+  (activityToggled)="activity.toggle()" />
 <main>
   <praxis-host-launch />
   <router-outlet />
 </main>
+@if (activity.supported) { <praxis-activity-panel /> }
 <praxis-command-bar
   [command]="navigation.command"
   [feedback]="feedback()"

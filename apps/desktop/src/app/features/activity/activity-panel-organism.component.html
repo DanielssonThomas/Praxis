@@ -1,0 +1,19 @@
+<aside id="desktop-activity" aria-labelledby="activity-title" [hidden]="!activity.opened()">
+  <header>
+    <h2 id="activity-title">Activity</h2>
+    @if (activity.unlocked()) {
+      <button praxisButton type="button" [disabled]="activity.busy()" (click)="activity.lock()">Lock activity</button>
+    }
+  </header>
+  @if (!activity.unlocked()) {
+    <praxis-operator-unlock formName="Unlock activity" action="Unlock activity"
+      [busy]="activity.busy()" (credentialSubmitted)="activity.unlock($event)" />
+  }
+  <p role="status">{{ activity.status() }}</p>
+  <div class="cards">
+    @for (card of activity.cards(); track card.requestId) {
+      <praxis-activity-card [card]="card" [busy]="activity.busy()"
+        (inspectRequested)="activity.inspect($event)" (decisionRequested)="activity.decide($event)" />
+    }
+  </div>
+</aside>

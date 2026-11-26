@@ -6,6 +6,8 @@
   "permissions": [
     "allow-host-status", "allow-retry-host",
     "allow-unlock-manager", "allow-lock-manager", "allow-manager-turn",
-    "allow-unlock-overview", "allow-lock-overview", "allow-read-overview"
+    "allow-unlock-overview", "allow-lock-overview", "allow-read-overview", "allow-control-session",
+    "allow-unlock-activity", "allow-lock-activity", "allow-read-activity",
+    "allow-inspect-activity", "allow-decide-activity"
   ]
 }
