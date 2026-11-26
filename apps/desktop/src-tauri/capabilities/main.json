@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Local host launch status and retry in the primary Praxis window.",
+  "windows": ["main"],
+  "permissions": ["allow-host-launch-status", "allow-retry-host"]
+}

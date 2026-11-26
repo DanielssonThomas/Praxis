@@ -1,0 +1,11 @@
+:host(:not([hidden])) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-block-end: 1rem;
+}
+
+p {
+  margin: 0;
+}

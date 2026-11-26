@@ -1,13 +1,14 @@
 import { Component, inject, signal } from "@angular/core";
 import { RouterOutlet } from "@angular/router";
 import { CommandBarMolecule } from "./command-bar/command-bar-molecule.component";
+import { HostLaunchMolecule } from "./host-launch/host-launch-molecule.component";
 import { ShellMenuOrganism } from "./menu/shell-menu-organism.component";
 import { commandHelp, resolveCommand, views } from "./shell-navigation";
 import { ShellNavigationService } from "./shell-navigation.service";
 
 @Component({
   selector: "praxis-shell",
-  imports: [RouterOutlet, CommandBarMolecule, ShellMenuOrganism],
+  imports: [RouterOutlet, CommandBarMolecule, HostLaunchMolecule, ShellMenuOrganism],
   templateUrl: "./shell-template.component.html",
   styleUrl: "./shell-template.component.css",
 })
