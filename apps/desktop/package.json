@@ -10,7 +10,7 @@
     "check:composition": "node scripts/check-composition.mjs",
     "check:rust": "node scripts/check-rust.mjs",
     "package:native": "node scripts/package-linux.mjs",
-    "test": "node --test src/app/shell/shell-template.browser.mjs"
+    "test": "node --test \"src/app/**/*.browser.mjs\""
   },
   "dependencies": {
     "@angular/common": "21.2.26",

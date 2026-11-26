@@ -122,7 +122,7 @@ test("packaged Manager reconnects real named Hermes output and Overview restores
     assert.equal(await desktop.execute("return getComputedStyle(document.querySelector('praxis-shell')).display"), "grid");
   };
   const command = async (value) => {
-    const field = await desktop.element('input[aria-label="Command"]');
+    const field = await desktop.element('[aria-label="Command"]');
     await field.click();
     await field.clear();
     await field.type(value + enter);
