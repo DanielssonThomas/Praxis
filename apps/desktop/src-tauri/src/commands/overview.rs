@@ -1,5 +1,6 @@
+use crate::models::session_control::{SessionControl, SessionControlRequest};
 use crate::models::{overview::OverviewProjection, workflow_error::WorkflowError};
-use crate::services::{host_http::HostClient, overview};
+use crate::services::{host_http::HostClient, overview, session_control};
 use crate::state::{host::ManagedHost, operator::OperatorSessions};
 use tauri::State;
 
@@ -28,4 +29,15 @@ pub(crate) async fn read_overview(
     sessions: State<'_, OperatorSessions>,
 ) -> Result<OverviewProjection, WorkflowError> {
     overview::read(&client, &host, &sessions).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn control_session(
+    client: State<'_, HostClient>,
+    host: State<'_, ManagedHost>,
+    sessions: State<'_, OperatorSessions>,
+    request: SessionControlRequest,
+) -> Result<SessionControl, WorkflowError> {
+    session_control::operate(&client, &host, &sessions, &request).await
 }

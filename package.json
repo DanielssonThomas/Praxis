@@ -24,6 +24,7 @@
     "package:desktop": "npm run package:native --workspace @praxis/desktop",
     "test:desktop:live": "node --test tests/runtime/desktop-launch.live.mjs",
     "test:desktop:manager": "node --test tests/runtime/desktop-manager.live.mjs",
+    "test:desktop:control": "node --test tests/runtime/desktop-control.live.mjs",
     "test:browser": "node --test tests/browser/shell.browser.mjs",
     "test:hermes": "node --test tests/runtime/hermes.live.mjs",
     "test:mcp:live": "node --test tests/runtime/mcp.live.mjs",

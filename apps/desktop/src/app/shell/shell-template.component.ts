@@ -1,5 +1,6 @@
 import { Component, inject, signal } from "@angular/core";
 import { RouterOutlet } from "@angular/router";
+import { ActivityPanelOrganism, ActivityService } from "../features/activity";
 import { CommandBarMolecule } from "./command-bar/command-bar-molecule.component";
 import { MANAGER_PROMPT } from "./manager-prompt";
 import { HostLaunchMolecule } from "./host-launch/host-launch-molecule.component";
@@ -9,13 +10,14 @@ import { ShellNavigationService } from "./shell-navigation.service";
 
 @Component({
   selector: "praxis-shell",
-  imports: [RouterOutlet, CommandBarMolecule, HostLaunchMolecule, ShellMenuOrganism],
+  imports: [RouterOutlet, ActivityPanelOrganism, CommandBarMolecule, HostLaunchMolecule, ShellMenuOrganism],
   templateUrl: "./shell-template.component.html",
   styleUrl: "./shell-template.component.css",
 })
 export class ShellTemplate {
   private readonly managerPrompt = inject(MANAGER_PROMPT);
   protected readonly navigation = inject(ShellNavigationService);
+  protected readonly activity = inject(ActivityService);
   protected readonly views = views;
   protected readonly feedback = signal("");
 

@@ -14,5 +14,6 @@
   <div [id]="'details-' + pane().session.id" [hidden]="!expanded()">
     <p>{{ pane().session.id }} · {{ usage() }}</p>
     @if (pane().usageNotice) { <p>{{ pane().usageNotice }}</p> }
+    <praxis-session-control [sessionId]="pane().session.id" [control]="pane().control" />
   </div>
 </article>

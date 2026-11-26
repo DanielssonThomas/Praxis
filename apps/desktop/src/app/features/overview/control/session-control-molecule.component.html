@@ -1,0 +1,17 @@
+<p>{{ mode() }}</p>
+@if (control().canTakeover) {
+  <button praxisButton type="button" data-operation="takeover" [disabled]="busy()" (click)="take()">Take over</button>
+}
+@if (control().canGuide) {
+  <form (submit)="send($event, guidance)">
+    <label>
+      Manual guidance
+      <textarea #guidance required maxlength="1000" rows="2"></textarea>
+    </label>
+    <button praxisButton type="submit" data-operation="guide" [disabled]="busy()">Send guidance</button>
+  </form>
+}
+@if (control().canReturn) {
+  <button praxisButton type="button" data-operation="return" [disabled]="busy()" (click)="handBack()">Return control</button>
+}
+<p role="status">{{ feedback() }}</p>

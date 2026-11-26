@@ -78,3 +78,11 @@ Open **Manager** and enter the local operator credential. Text in the permanent 
 Run `npm run test:desktop:manager` with the same package and display setup as the native lifecycle smoke. The driver starts a disposable, pinned named Hermes profile with a scripted local provider, observes Manager and Overview in the bundled window, and verifies both views across reopen.
 
 The production Angular bundle loads its stylesheet as a local asset. Tauri supplies the style nonce that Angular uses for component styles in the packaged window.
+
+## Activity and manual control
+
+Open **Activity** in the shell header to review persisted requests while switching between views. Enter the local operator credential to inspect a request and decide its exact approval. The existing Node approval service checks the current granted scope, native assignment, expiry and decisions before every write.
+
+Expand a worker in **Overview** to see the controls permitted for that session. Take over before sending guidance. Return control after Hermes verifies the delivery or records it in the native transcript. Praxis preserves the manual fence across restart while verification is pending.
+
+Run `npm run test:desktop:control` with the package, pinned Hermes and display setup from native validation. The fixture observes the real worker, persisted Activity decisions, scope and denial, a manual fence across restart, and verified handback.
