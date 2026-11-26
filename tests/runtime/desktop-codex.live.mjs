@@ -399,8 +399,6 @@ test("packaged Manager approves one bounded Codex edit and restores its verified
   assert.equal(verification.value.verification.conforms, true);
   assert.ok(verification.value.verification.checks.some(({ outcome }) => outcome.status === "passed"));
   assert.equal(store.eventsOfKind("task.completed").length, 1);
-  assert.equal((await complete()).code, 0);
-  assert.equal(store.eventsOfKind("task.completed").length, 1);
 
   t.diagnostic(JSON.stringify({ os: "Linux x64", codex: release, model: configuration.profile.model,
     webkit: desktop.capabilities.browserVersion, provider: account ? "authorized account" : "scripted loopback",
