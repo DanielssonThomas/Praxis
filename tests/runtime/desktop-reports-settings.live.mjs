@@ -35,7 +35,7 @@ async function fixture(t) {
     try {
       await close();
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 6, retryDelay: 100 });
     }
   });
   await mkdir(config, { recursive: true });
@@ -79,7 +79,10 @@ async function setInput(app, selector, value) {
 
 async function assertNarrow(app) {
   await app.resize(390, 650);
-  assert.equal(await app.execute("const main=document.querySelector('main'); return main.scrollWidth <= main.clientWidth"), true);
+  await eventually(() => app.execute(`
+    const main = document.querySelector("main");
+    return window.innerWidth <= 390 && main.scrollWidth <= main.clientWidth;
+  `), "The rendered desktop view did not fit its narrow viewport.");
 }
 
 async function capture(app, name) {
