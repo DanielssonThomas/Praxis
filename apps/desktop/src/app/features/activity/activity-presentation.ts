@@ -16,15 +16,20 @@ const actionNames: Record<string, string> = {
   "session.stop": "Stop worker",
   "session.inspect": "Inspect worker",
   "management.review": "Review background management",
+  "task.delegate": "Delegate task to Codex",
 };
 
 export function activityActionLabel(kind: string): string {
   return actionNames[kind] ?? kind;
 }
 
-export function activityDetail(phase: ActivityCard["phase"]): string {
-  if (phase.state === "resolved") return phase.native.status === "stopping"
-    ? "Stop requested. Hermes has yet to report a settled stop."
-    : `Hermes reported the run as ${phase.native.status.replaceAll("_", " ")}.`;
+export function activityDetail({ action, phase }: ActivityCard): string {
+  if (phase.state === "resolved") {
+    const status = phase.native.status.replaceAll("_", " ");
+    if (action.kind === "task.delegate") return `Codex reported the run as ${status}.`;
+    return phase.native.status === "stopping"
+      ? "Stop requested. Hermes has yet to report a settled stop."
+      : `Hermes reported the run as ${status}.`;
+  }
   return "reason" in phase ? phase.reason : "";
 }

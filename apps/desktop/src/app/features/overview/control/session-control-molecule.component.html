@@ -1,4 +1,8 @@
-<p>{{ mode() }}</p>
+@if (control().unavailableReason; as reason) {
+  <p data-control-unavailable>{{ reason }}</p>
+} @else {
+  <p>{{ mode() }}</p>
+}
 @if (control().canTakeover) {
   <button praxisButton type="button" data-operation="takeover" [disabled]="busy()" (click)="take()">Take over</button>
 }

@@ -30,8 +30,20 @@ pub(crate) struct OverviewPane {
     ticket: String,
     highlighted: bool,
     runtime: OverviewRuntime,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    worker: Option<OverviewWorker>,
     control: SessionControl,
     usage_notice: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Type)]
+#[serde(
+    tag = "runtime",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub(crate) enum OverviewWorker {
+    Codex { run_id: String },
 }
 
 #[derive(Deserialize, Serialize, Type)]
@@ -67,7 +79,7 @@ mod tests {
             "runtime": {"availability": "unavailable", "reason": "Waiting for native output."},
             "control": {
                 "mode": "read_only", "canTakeover": false, "canGuide": false, "canReturn": false,
-                "guidance": "none", "unavailableReason": "Manual control is unavailable for Codex."
+                "guidance": "none", "unavailableReason": "Takeover, guidance, and handback are unavailable for this Codex worker."
             },
             "worker": {"runtime": "codex", "runId": "native_fixture_run"}
         });
@@ -77,7 +89,10 @@ mod tests {
         assert_eq!(outgoing["control"], incoming["control"]);
 
         incoming.as_object_mut().unwrap().remove("worker");
-        incoming["control"].as_object_mut().unwrap().remove("unavailableReason");
+        incoming["control"]
+            .as_object_mut()
+            .unwrap()
+            .remove("unavailableReason");
         let pane = serde_json::from_value::<OverviewPane>(incoming).unwrap();
         let outgoing = serde_json::to_value(pane).unwrap();
         assert!(outgoing.get("worker").is_none());

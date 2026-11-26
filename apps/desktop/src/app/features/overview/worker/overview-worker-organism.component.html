@@ -1,4 +1,5 @@
 <article class="session-pane" [attr.data-session-id]="pane().session.id"
+  [attr.data-worker-runtime]="pane().worker?.runtime"
   [attr.data-highlighted]="pane().highlighted" [attr.aria-label]="pane().task.title">
   <header>
     <p class="ticket">{{ pane().ticket }}</p>
@@ -24,6 +25,10 @@
       <h3>Session details</h3>
       <dl>
         <div><dt>Session</dt><dd class="identity">{{ pane().session.id }}</dd></div>
+        @if (pane().worker; as worker) {
+          <div><dt>Runtime</dt><dd>Codex</dd></div>
+          <div><dt>Native run</dt><dd class="identity">{{ worker.runId }}</dd></div>
+        }
       </dl>
       <praxis-session-control [sessionId]="pane().session.id" [control]="pane().control" />
     </section>

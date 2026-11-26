@@ -108,7 +108,7 @@ async function assertNoHorizontalOverflow(page) {
 test("a Codex Overview pane displays its own native identity and unavailable controls", async (t) => {
   const fixture = projection(1);
   const runId = "codex_fixture_native_run";
-  const reason = "Codex does not support takeover, guidance, or handback.";
+  const reason = "Takeover, guidance, and handback are unavailable for this Codex worker.";
   Object.assign(fixture.panes[0], {
     worker: { runtime: "codex", runId },
     control: { ...readOnly, unavailableReason: reason },

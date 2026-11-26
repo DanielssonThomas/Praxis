@@ -28,8 +28,8 @@ export class ActivityReviewMolecule {
     return phase ? activityLabels[phase.state] : "Request unavailable";
   });
   protected readonly detail = computed(() => {
-    const phase = this.latest()?.phase;
-    return phase ? activityDetail(phase) : "";
+    const card = this.latest();
+    return card ? activityDetail(card) : "";
   });
   protected readonly expiry = computed(() => new Date(this.reviewed().phase.expiresAt).toLocaleString(undefined, {
     dateStyle: "medium", timeStyle: "long",

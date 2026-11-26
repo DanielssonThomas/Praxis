@@ -17,7 +17,7 @@ export class ActivityCardMolecule {
 
   protected readonly label = computed(() => activityLabels[this.card().phase.state]);
   protected readonly title = computed(() => activityActionLabel(this.card().action.kind));
-  protected readonly detail = computed(() => activityDetail(this.card().phase));
+  protected readonly detail = computed(() => activityDetail(this.card()));
   private readonly reviewButton = viewChild.required("reviewButton", { read: ElementRef<HTMLButtonElement> });
 
   protected startReview(): void {
