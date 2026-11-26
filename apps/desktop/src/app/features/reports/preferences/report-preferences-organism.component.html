@@ -1,13 +1,15 @@
 <form #form aria-label="Report preferences" (submit)="submit($event)">
   <fieldset [disabled]="busy()">
     <legend>Visible metrics</legend>
-    @for (item of metrics; track item.metric) {
-      <label>
-        <input type="checkbox" [name]="'metric_' + item.metric"
-          [checked]="preferences().visibleMetrics.includes(item.metric)" (change)="preview(form)">
-        {{ item.label }}
-      </label>
-    }
+    <div class="metric-options">
+      @for (item of metrics; track item.metric) {
+        <label>
+          <input type="checkbox" [name]="'metric_' + item.metric"
+            [checked]="preferences().visibleMetrics.includes(item.metric)" (change)="preview(form)">
+          {{ item.label }}
+        </label>
+      }
+    </div>
   </fieldset>
   <fieldset [disabled]="busy()">
     <legend>Local data</legend>

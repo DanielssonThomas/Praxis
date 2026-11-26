@@ -15,6 +15,11 @@ export class ReportChartMolecule {
   protected readonly chartFailed = signal(false);
   private readonly canvas = viewChild<ElementRef<HTMLCanvasElement>>("chartCanvas");
 
+  protected readonly missing = computed(() => {
+    const { metric } = this.display();
+    return this.buckets().filter(({ metrics }) => metrics[metric] == null).length;
+  });
+
   protected readonly latest = computed(() => {
     const { metric, digits } = this.display();
     const latest = [...this.buckets()].reverse().find((bucket) => bucket.metrics[metric] != null);
@@ -39,6 +44,10 @@ export class ReportChartMolecule {
       this.chartFailed.set(false);
       void import("chart.js/auto").then(({ default: ChartLibrary }) => {
         if (!active) return;
+        const styles = getComputedStyle(canvas);
+        const accent = styles.getPropertyValue("--accent").trim();
+        const muted = styles.getPropertyValue("--muted").trim();
+        const border = styles.getPropertyValue("--border").trim();
         chart = new ChartLibrary(canvas, {
           type: "line",
           data: {
@@ -47,8 +56,9 @@ export class ReportChartMolecule {
               label,
               data: buckets.map((bucket) => bucket.metrics[metric] ?? null),
               spanGaps: false,
-              borderColor: "#244db6",
-              backgroundColor: "#244db6",
+              borderColor: accent,
+              backgroundColor: accent,
+              borderWidth: 2,
               pointRadius: 3,
             }],
           },
@@ -58,7 +68,10 @@ export class ReportChartMolecule {
             animation: false,
             interaction: { mode: "nearest", intersect: false },
             plugins: { legend: { display: false } },
-            scales: { x: { ticks: { maxTicksLimit: 5 } }, y: { beginAtZero: true, ticks: { precision: digits } } },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: muted, maxTicksLimit: 4, maxRotation: 0 } },
+              y: { beginAtZero: true, grid: { color: border }, ticks: { color: muted, precision: digits } },
+            },
           },
         });
       }).catch(() => {

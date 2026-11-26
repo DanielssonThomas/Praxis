@@ -1,46 +1,68 @@
-<h1>Reports</h1>
-<p data-reports-status role="status">{{ status() }}</p>
+<header class="report-header">
+  <h1>Reports</h1>
+  @if (report(); as current) {
+    <div class="controls">
+      <label>
+        Range
+        <select #range name="reportRange" [disabled]="busy()" (change)="changeRange(range)">
+          @for (days of ranges; track days) {
+            <option [value]="days" [selected]="days === current.days"
+              [disabled]="days > current.preferences.retentionDays">{{ days }} days</option>
+          }
+        </select>
+      </label>
+      <button praxisButton type="button" data-report-lock [disabled]="busy()" (click)="lock()">Lock reports</button>
+      <button praxisButton #customize class="customize" type="button" aria-controls="report-customization"
+        [attr.aria-expanded]="customizing()" (click)="toggleCustomization()">Customize reports</button>
+    </div>
+  }
+</header>
+<p class="feedback" data-reports-status role="status">{{ status() }}</p>
 @if (report(); as current) {
-  <div class="controls">
-    <label>
-      Range
-      <select #range name="reportRange" [disabled]="busy()" (change)="changeRange(range)">
-        @for (days of ranges; track days) {
-          <option [value]="days" [selected]="days === current.days"
-            [disabled]="days > current.preferences.retentionDays">{{ days }} days</option>
-        }
-      </select>
-    </label>
-    <button praxisButton type="button" [disabled]="busy()" (click)="lock()">Lock reports</button>
+  <section id="report-customization" class="customization" aria-labelledby="report-preferences-title"
+    [hidden]="!customizing()" (keydown.escape)="closeCustomization($event)">
+    @if (customizing()) {
+      <h2 id="report-preferences-title">Report preferences</h2>
+      <praxis-report-preferences [preferences]="current.preferences" [busy]="busy()"
+        (metricsChanged)="draftMetrics.set($event)" (submitted)="savePreferences($event)" />
+    }
+  </section>
+  <div class="collection">
+    <p>
+      @if (current.preferences.collectionEnabled) {
+        Report collection is active. Charts use UTC and show missing measurements as gaps.
+      } @else {
+        Report collection is paused. The operational audit continues.
+      }
+    </p>
+    <div class="actions">
+      <button praxisButton type="button" data-report-export
+        [disabled]="!exportAvailable()"
+        [attr.aria-describedby]="unsavedMetrics() && current.preferences.allowExport ? 'report-save-first' : null"
+        (click)="exportReport()">Export JSON</button>
+      <button praxisButton #clear type="button" data-report-clear aria-controls="report-clear-confirmation"
+        [attr.aria-expanded]="confirmingClear()" [disabled]="busy() || !current.preferences.allowClearHistory"
+        (click)="confirmingClear.set(true)">Clear report history</button>
+    </div>
+  </div>
+  @if (unsavedMetrics() && current.preferences.allowExport) {
+    <p class="save-first" id="report-save-first">Save visible metrics before exporting.</p>
+  }
+  <div id="report-clear-confirmation" class="confirmation" role="group" aria-label="Confirm clearing report history"
+    [hidden]="!confirmingClear() || !current.preferences.allowClearHistory" (keydown.escape)="keepHistory($event)">
+    <p>Previously dated observations will be hidden from reports. The operational audit will be kept.</p>
+    <div class="actions">
+      <button praxisButton #keep type="button" (click)="keepHistory()">Keep history</button>
+      <button praxisButton type="button" data-confirm-report-clear [disabled]="busy()" (click)="clearHistory()">Confirm clear</button>
+    </div>
   </div>
   @if (current.preferences.collectionEnabled) {
-    <p>Charts use UTC. Missing measurements appear as gaps.</p>
     <div class="metrics">
       @for (metric of activeMetrics(); track metric.metric) {
         <praxis-report-chart [display]="metric" [buckets]="current.buckets" [days]="current.days" />
       } @empty {
         <p>Choose a visible metric to display a chart.</p>
       }
-    </div>
-  } @else {
-    <p>Report collection is paused. The operational audit continues.</p>
-  }
-  <h2>Report preferences</h2>
-  <praxis-report-preferences [preferences]="current.preferences" [busy]="busy()"
-    (metricsChanged)="visible.set($event)" (submitted)="savePreferences($event)" />
-  <div class="actions">
-    <button praxisButton type="button" data-report-export
-      [disabled]="busy() || !current.preferences.allowExport || !current.preferences.collectionEnabled"
-      (click)="exportReport()">Export JSON</button>
-    <button praxisButton type="button" data-report-clear
-      [disabled]="busy() || !current.preferences.allowClearHistory"
-      (click)="confirmingClear.set(true)">Clear report history</button>
-  </div>
-  @if (confirmingClear()) {
-    <div class="confirmation" role="group" aria-label="Confirm clearing report history">
-      <p>Previously dated observations will be hidden from reports. The operational audit will be kept.</p>
-      <button praxisButton type="button" data-confirm-report-clear (click)="clearHistory()">Confirm clear</button>
-      <button praxisButton type="button" (click)="confirmingClear.set(false)">Keep history</button>
     </div>
   }
 } @else if (native) {
