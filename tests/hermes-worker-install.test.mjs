@@ -37,7 +37,7 @@ async function fixture(t) {
     display: { autoPresent: true },
   }));
   await writeFile(launcher, `#!${process.execPath}
-const { existsSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
+const { mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
 const argv = process.argv.slice(2);
 const home = process.env.HERMES_HOME;
@@ -51,7 +51,6 @@ if (argv[0] === "--version") {
   writeFileSync(join(destination, "config.yaml"), "{}");
   writeFileSync(join(destination, "created-with.json"), JSON.stringify(argv.slice(5)));
 } else if (argv[2] === "config" && argv[3] === "set") {
-  if (existsSync(join(home, "fixture-config-failure"))) process.exit(1);
   const file = join(home, "profiles", profile, "config.yaml");
   const config = JSON.parse(readFileSync(file, "utf8"));
   config[argv[4]] = JSON.parse(argv[5]);

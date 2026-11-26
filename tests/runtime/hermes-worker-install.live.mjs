@@ -70,7 +70,8 @@ test("two installed native workers report concurrently and stay isolated with no
     principal: `principal_worker_${id}`, mcpKey: token(), apiKey: token(),
     fact: `A distinct observation for the ${id} worker.`,
     proposal: `Skill proposal for the ${id} worker with fixture evidence.`,
-    seen: new Set(), reachedReport: false, ownReport: false, deniedForeignReport: false, sawOwnHistory: false,
+    seen: new Set(), reachedReport: false, ownReport: false, deniedForeignReport: false,
+    sawOwnProfile: false, sawOtherProfile: false, sawOwnHistory: false,
   }));
   let mcp;
   t.after(async () => {
@@ -119,8 +120,8 @@ test("two installed native workers report concurrently and stay isolated with no
       const names = call.tools?.map(({ function: definition }) => definition.name) ?? [];
       if (!names.length) return modelReply("Worker fixture title");
       const system = call.messages.filter(({ role }) => role === "system").map(({ content }) => content).join("\n");
-      worker.sawOwnProfile = system.includes(`Profile marker for ${worker.id} only.`);
-      worker.sawOtherProfile = system.includes(`Profile marker for ${other.id} only.`);
+      worker.sawOwnProfile ||= system.includes(`Profile marker for ${worker.id} only.`);
+      worker.sawOtherProfile ||= system.includes(`Profile marker for ${other.id} only.`);
       if (input === "Recall your fixture observation.") {
         const history = JSON.stringify(call.messages.slice(0, lastUser));
         worker.sawOwnHistory = history.includes(worker.fact) && !history.includes(other.fact);
@@ -130,14 +131,11 @@ test("two installed native workers report concurrently and stay isolated with no
       for (const name of names) worker.seen.add(name);
       const results = call.messages.slice(lastUser + 1).filter(({ role }) => role === "tool");
       const observed = JSON.stringify(results);
-      for (const name of [...allowed, ...blocked]) {
-        if (observed.includes(`\"${name}\"`) && !observed.includes(`No tool named ${name}`)) {
-          for (const { content } of results) {
-            try {
-              if (JSON.parse(content).tools?.[name]?.parameters) worker.seen.add(name);
-            } catch { /* Non-description tool results are checked separately. */ }
-          }
-        }
+      for (const { content } of results) {
+        try {
+          const schemas = JSON.parse(content).tools ?? {};
+          for (const [name, schema] of Object.entries(schemas)) if (schema?.parameters) worker.seen.add(name);
+        } catch { /* Non-description tool results are checked separately. */ }
       }
       if (!results.length && names.includes("tool_describe")) return toolReply("describe", "tool_describe", { names: [...allowed, ...blocked] });
       const report = { sessionId: worker.session.id, phase: "result", message: worker.proposal,
