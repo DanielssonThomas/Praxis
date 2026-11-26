@@ -196,9 +196,14 @@ const eventDetailsSchema = z.discriminatedUnion("type", [
   }),
   z.strictObject({
     type: z.literal("policy_admission"), requestId: eventIdSchema, sessionId: sessionIdSchema,
-    revision: authorityRevision, fingerprint: policyDigest, sourceDigest: policyDigest,
+    revision: authorityRevision, fingerprint: policyDigest, sourceDigest: policyDigest, sourceRevision: nonblankText.optional(),
   }),
+  z.strictObject({ type: z.literal("policy_stage"), admissionId: eventIdSchema, workspaceDigest: policyDigest }),
   z.strictObject({ type: z.literal("policy_launch"), admissionId: eventIdSchema, assignment: workerAssignmentSchema }),
+  z.strictObject({
+    type: z.literal("policy_settlement"), admissionId: eventIdSchema, receiptDigest: policyDigest,
+    status: runtimeSessionStatusSchema.extract(["completed", "failed", "stopped", "interrupted"]),
+  }),
   z.strictObject({
     type: z.literal("policy_completion"), admissionId: eventIdSchema, reviewerId: principalIdSchema,
     sourceDigest: policyDigest, receiptDigest: policyDigest, runId: workerAssignmentSchema.shape.runId,
@@ -209,7 +214,8 @@ const eventDetailsSchema = z.discriminatedUnion("type", [
 
 const policyEventKinds: Readonly<Partial<Record<string, string>>> = {
   policy_authority: "task.policy_authorized", policy_admission: "task.delegation_admitted",
-  policy_launch: "task.delegation_launched", policy_completion: "task.completed",
+  policy_stage: "task.delegation_staged", policy_launch: "task.delegation_launched",
+  policy_settlement: "task.delegation_settled", policy_completion: "task.completed",
 };
 
 export const eventSchema = z.strictObject({

@@ -37,6 +37,8 @@ export type SessionControlState = z.infer<typeof controlStateSchema>;
 type StoreErrorCode =
   | "invalid_record"
   | "identity_conflict"
+  | "policy_limit"
+  | "policy_stale"
   | "missing_reference"
   | "unsupported_version"
   | "storage_failure";
@@ -139,6 +141,39 @@ export class OperationalStore {
   appendEvent(value: unknown): WriteResult {
     const record = parseInput(eventSchema, value);
     return this.#write(record, { subjectId: record.subject.id });
+  }
+
+  claimPolicyAdmission(authorityEvent: Event, admissionEvent: Event, limits: { maxAttempts: number; maxConcurrency: number }): WriteResult {
+    const authority = parseInput(eventSchema, authorityEvent);
+    const admission = parseInput(eventSchema, admissionEvent);
+    const { details: decision, subject } = admission;
+    const version = authority.details;
+    if (subject.kind !== "task" || decision?.type !== "policy_admission" || version?.type !== "policy_authority"
+      || authority.subject.id !== subject.id || version.revision !== decision.revision
+      || !Number.isSafeInteger(limits.maxAttempts) || limits.maxAttempts < 1
+      || !Number.isSafeInteger(limits.maxConcurrency) || limits.maxConcurrency < 1) {
+      throw new OperationalStoreError("invalid_record", "Expected matching task policy authority, admission and limits");
+    }
+    return this.#transaction(() => {
+      const events = this.eventsFor(subject.id);
+      const prior = events.find(({ id }) => id === admission.id);
+      if (prior !== undefined) {
+        return this.#write({ ...admission, occurredAt: prior.occurredAt }, { subjectId: subject.id });
+      }
+      if (events.some(({ details }) => details?.type === "policy_completion"
+        || (details?.type === "policy_authority" && details.revision > version.revision))) {
+        throw new OperationalStoreError("policy_stale", "The task was completed or a later authority version was recorded");
+      }
+      const priorAuthority = events.find(({ id }) => id === authority.id);
+      this.#write(priorAuthority ? { ...authority, occurredAt: priorAuthority.occurredAt } : authority, { subjectId: subject.id });
+      const used = events.filter(({ details }) => details?.type === "policy_admission");
+      const settled = new Set(events.flatMap(({ details }) => details?.type === "policy_settlement" ? [details.admissionId] : []));
+      if (used.some(({ details }) => details?.type === "policy_admission" && details.sessionId === decision.sessionId)
+        || used.length >= limits.maxAttempts || used.filter(({ id }) => !settled.has(id)).length >= limits.maxConcurrency) {
+        throw new OperationalStoreError("policy_limit", "The destination session or task delegation limit has already been reserved");
+      }
+      return this.#write(admission, { subjectId: subject.id });
+    });
   }
 
   recordUsage(value: unknown): WriteResult {

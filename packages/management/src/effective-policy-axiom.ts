@@ -19,6 +19,7 @@ interface Brief {
   parentId?: string;
   ownedPaths: string[];
   criteria: readonly { id: string; required: boolean }[];
+  limits: { maxAttempts: number; maxConcurrency: number };
   policy: PolicyIdentity;
 }
 
@@ -77,6 +78,7 @@ export interface VerifyOptions {
 }
 
 export interface PolicyAxiom {
+  readonly axiomRoot?: string;
   readonly evidenceRoot?: string;
   parseBrief(value: unknown): Brief;
   parseHost(value: unknown): HostIdentity;
@@ -132,6 +134,7 @@ export async function loadPolicyAxiom(axiomRoot: string, evidenceRoot: string): 
   const archive = await realpath(evidenceRoot);
   const store = new evidence.EvidenceStore(archive);
   return {
+    axiomRoot: root,
     evidenceRoot: archive,
     parseBrief: (value) => contracts.taskBriefSchema.parse(value),
     parseHost: (value) => contracts.hostIdentitySchema.parse(value),

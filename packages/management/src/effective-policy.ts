@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { realpath } from "node:fs/promises";
 import { isAbsolute, relative, sep } from "node:path";
 import {
   contractVersion, eventIdSchema, eventSchema, principalIdSchema, runtimeSessionSnapshotSchema, usageSchema,
@@ -31,6 +32,7 @@ interface IntegrationResult {
   admissionId: string;
   assignment: WorkerAssignment;
   observation: WorkerObservation;
+  workerRoot: string;
 }
 
 interface Completion extends IntegrationResult {
@@ -40,8 +42,17 @@ interface Completion extends IntegrationResult {
 
 type Details = Extract<NonNullable<Event["details"]>, { type: `policy_${string}` }>;
 type AuthorityDetails = Extract<Details, { type: "policy_authority" }>;
+type SettlementDetails = Extract<Details, { type: "policy_settlement" }>;
+interface IntegrationScope {
+  admission: Event;
+  request: WorkerAssignmentRequest;
+  plan: VerificationRun["plan"];
+  version: AuthorityDetails;
+  guardedPaths: readonly string[];
+}
 type Write = "inserted" | "duplicate";
-type ErrorCode = "invalid_input" | "forbidden" | "not_found" | "authority_conflict" | "stale" | "unavailable";
+type ErrorCode = "invalid_input" | "forbidden" | "not_found" | "authority_conflict" | "stale" | "unavailable" | "limit";
+const terminal = new Set<string>(["completed", "failed", "stopped", "interrupted"]);
 
 export class EffectivePolicyError extends Error {
   constructor(readonly code: ErrorCode, message: string, options?: ErrorOptions) {
@@ -108,49 +119,85 @@ export class EffectivePolicyService {
     const source = await this.#source(prepared.plan);
     if (digest([fingerprint, source]) !== expectedFingerprint) throw new EffectivePolicyError("stale", "The exact approved delegation scope changed.");
     const admissionId = eventId("admission", requestId);
-    if (this.options.store.getEvent(eventId("completion", request.task.id)) && !this.options.store.getEvent(admissionId)) {
-      throw new EffectivePolicyError("stale", "The task already has a conforming completion.");
-    }
-    this.#write(policyEvent(eventId("authority", [request.task.id, version.revision]), "task.policy_authorized", request.task.id, version));
-    const write = this.#write(policyEvent(admissionId, "task.delegation_admitted", request.task.id, {
+    const authority = policyEvent(eventId("authority", [request.task.id, version.revision]), "task.policy_authorized", request.task.id, version);
+    const admission = policyEvent(admissionId, "task.delegation_admitted", request.task.id, {
       type: "policy_admission", requestId: eventIdSchema.parse(requestId), sessionId: request.session.id, revision: version.revision,
-      fingerprint, sourceDigest: source.digest,
-    }));
+      fingerprint, sourceDigest: source.digest, sourceRevision: source.revision,
+    });
+    let write: Write;
+    try {
+      write = this.options.store.claimPolicyAdmission(authority, admission, prepared.plan.task.limits);
+    } catch (error) {
+      if (!(error instanceof OperationalStoreError)) throw error;
+      if (error.code === "policy_limit") throw new EffectivePolicyError("limit", error.message);
+      if (error.code === "policy_stale") throw new EffectivePolicyError("stale", error.message);
+      if (error.code !== "identity_conflict") throw error;
+      throw new EffectivePolicyError("authority_conflict", "An incompatible delegation or task authority is already recorded.");
+    }
     return { admissionId, request, write, source };
+  }
+
+  readAdmission(requestId: string) {
+    const admission = this.options.store.getEvent(eventId("admission", eventIdSchema.parse(requestId)));
+    if (!admission || admission.details?.type !== "policy_admission") return undefined;
+    const { details } = admission;
+    const launch = this.options.store.getEvent(eventId("launch", admission.id))?.details;
+    const settlement = this.options.store.getEvent(eventId("settlement", admission.id))?.details;
+    return {
+      admissionId: admission.id, sessionId: details.sessionId, revision: details.revision,
+      source: { digest: details.sourceDigest, revision: details.sourceRevision },
+      assignment: launch?.type === "policy_launch" ? launch.assignment : undefined,
+      settlement: settlement?.type === "policy_settlement"
+        ? { status: settlement.status, receiptDigest: settlement.receiptDigest } : undefined,
+    };
+  }
+
+  /** Call inside prepareWorkspace, after staging and immediately before starting the worker. */
+  async verifyStaging(admissionId: string, workerRoot: string): Promise<Write> {
+    const current = await this.#current(admissionId);
+    const root = await this.#workerRoot(current.plan.root, workerRoot);
+    const [staged, integrated] = await Promise.all([this.#source(current.plan, root), this.#source(current.plan)]);
+    const { sourceDigest, sourceRevision } = current.details;
+    if (staged.digest !== sourceDigest || integrated.digest !== sourceDigest
+      || staged.revision !== sourceRevision || integrated.revision !== sourceRevision) {
+      throw new EffectivePolicyError("stale", "The staged workspace and integration checkout must match the admitted source.");
+    }
+    return this.#write(policyEvent(eventId("stage", current.admission.id), "task.delegation_staged", current.request.task.id, {
+      type: "policy_stage", admissionId: current.admission.id, workspaceDigest: digest(root),
+    }));
   }
 
   async recordLaunch(admissionId: string, value: unknown): Promise<Write> {
     const { admission, request } = await this.#current(admissionId);
     const assignment = this.#assignment(request.task.id, request.session.id, value);
+    if (this.options.store.getEvent(eventId("stage", admission.id))?.details?.type !== "policy_stage") {
+      throw new EffectivePolicyError("invalid_input", "Verify the exact staged workspace before recording the native launch.");
+    }
     return this.#write(policyEvent(eventId("launch", admission.id), "task.delegation_launched", request.task.id, {
       type: "policy_launch", admissionId: admission.id, assignment,
+    }));
+  }
+
+  recordSettlement(admissionId: string, assignment: WorkerAssignment, observation: WorkerObservation): Write {
+    const { admission, details } = this.#admission(admissionId);
+    const session = this.options.store.getSession(details.sessionId);
+    if (!session) throw new EffectivePolicyError("not_found", "The admitted session is unavailable.");
+    const result = this.#receipt(admission.id, session.taskId, session.id, assignment, observation);
+    return this.#write(policyEvent(eventId("settlement", admission.id), "task.delegation_settled", session.taskId, {
+      type: "policy_settlement", admissionId: admission.id, ...result,
     }));
   }
 
   /** Run admitted checks only from the trusted, isolated verification process. */
   async verify(admissionId: string, options: VerifyOptions = {}): Promise<VerificationRun> {
     const { plan, host, admission } = await this.#current(admissionId);
-    if (this.options.store.getEvent(eventId("launch", admission.id))?.details?.type !== "policy_launch") {
-      throw new EffectivePolicyError("invalid_input", "Record the admitted native launch before acceptance verification.");
-    }
+    this.#completedSettlement(admission.id);
     return this.axiom.verify(plan, host, options);
   }
 
   async inspectIntegration(input: IntegrationResult) {
     const current = await this.#current(input.admissionId);
-    const assignment = this.#assignment(current.request.task.id, current.request.session.id, input.assignment);
-    const launch = this.options.store.getEvent(eventId("launch", current.admission.id))?.details;
-    if (launch?.type !== "policy_launch" || digest(launch.assignment) !== digest(assignment)) {
-      throw new EffectivePolicyError("invalid_input", "The native result must match the recorded launch.");
-    }
-    const snapshot = runtimeSessionSnapshotSchema.safeParse(input.observation?.snapshot);
-    const usage = usageSchema.safeParse(input.observation?.usage);
-    if (!snapshot.success || snapshot.data.taskId !== assignment.taskId || snapshot.data.sessionId !== assignment.sessionId
-      || snapshot.data.status !== "completed" || !usage.success || usage.data.sessionId !== assignment.sessionId) {
-      throw new EffectivePolicyError("invalid_input", "The exact native worker must have a settled completed observation.");
-    }
-    const source = await this.#source(current.plan);
-    return { source, receiptDigest: digest([assignment, snapshot.data, usage.data]) };
+    return this.#inspect(current, input);
   }
 
   async complete(input: Completion): Promise<{ verification: VerificationReport; write?: Write }> {
@@ -158,7 +205,7 @@ export class EffectivePolicyService {
     if (input.review?.reviewerId !== current.reviewerId) {
       throw new EffectivePolicyError("forbidden", "The integrated result requires its authorized reviewer.");
     }
-    const integrated = await this.inspectIntegration(input);
+    const integrated = await this.#inspect(current, input);
     if (input.review.sourceDigest !== integrated.source.digest || input.review.receiptDigest !== integrated.receiptDigest) {
       throw new EffectivePolicyError("stale", "The integrated source or settled worker result changed after review.");
     }
@@ -168,11 +215,11 @@ export class EffectivePolicyService {
       throw new EffectivePolicyError("stale", "The evidence must come from the approved verification plan and host.");
     }
     const assessed = await this.axiom.assess({ ...run, plan: current.plan, host: current.host });
-    const launchedAt = this.options.store.getEvent(eventId("launch", current.admission.id))!.occurredAt;
+    const settledAt = this.#completedSettlement(current.admission.id).occurredAt;
     const checks = await Promise.all(assessed.checks.map(async (check) => {
       if (!check.required || check.outcome.status !== "passed") return check;
       const observedAt = check.evidenceId && await this.axiom.evidenceStartedAt(check.evidenceId).catch(() => undefined);
-      if (observedAt && Date.parse(observedAt) >= Date.parse(launchedAt)) return check;
+      if (observedAt && Date.parse(observedAt) >= Date.parse(settledAt)) return check;
       return { ...check, outcome: { status: "blocked", reason: "Observed evidence must be fresh for the admitted native run." } };
     }));
     const conforms = assessed.conforms && checks.every((check) => !check.required || check.outcome.status === "passed");
@@ -180,8 +227,8 @@ export class EffectivePolicyService {
     if (!conforms) return { verification };
 
     const final = await this.#current(input.admissionId);
-    const source = await this.#source(final.plan);
-    if (source.digest !== integrated.source.digest) throw new EffectivePolicyError("stale", "The integrated source changed during completion.");
+    const { source } = await this.#inspect(final, input);
+    if (digest(source) !== digest(integrated.source)) throw new EffectivePolicyError("stale", "The integrated source changed during completion.");
     const taskId = final.request.task.id;
     const write = this.#write(policyEvent(eventId("completion", taskId), "task.completed", taskId, {
       type: "policy_completion", admissionId: final.admission.id, reviewerId: final.reviewerId,
@@ -226,9 +273,7 @@ export class EffectivePolicyService {
       throw new EffectivePolicyError("forbidden", "The brief does not select the qualified, governing Axiom policy.");
     }
     const plan = await this.axiom.plan({ root: authority.root, task: brief, requirements });
-    if (this.axiom.evidenceRoot && (within(plan.root, this.axiom.evidenceRoot) || within(this.axiom.evidenceRoot, plan.root))) {
-      throw new EffectivePolicyError("forbidden", "The trusted evidence archive must stay outside the integration checkout.");
-    }
+    this.#requireIsolatedRoot(plan.root);
     const guardedPaths = [...new Set([...protectedPaths, ...commandPaths(plan)])];
     if (brief.ownedPaths.some((owned) => guardedPaths.some((guarded) => overlaps(owned, guarded)))) {
       throw new EffectivePolicyError("forbidden", "Worker scope overlaps an authoritative verification path.");
@@ -257,20 +302,25 @@ export class EffectivePolicyService {
     }
     const request = workerAssignmentRequestSchema.parse({ task, session, brief });
     const fingerprint = digest([intent, grant, request, version]);
-    return { request, fingerprint, version, plan, host, reviewerId };
+    return { request, fingerprint, version, plan, host, reviewerId, guardedPaths };
   }
 
-  async #current(admissionId: string) {
+  #admission(admissionId: string) {
     const admission = this.options.store.getEvent(admissionId);
     const details = admission?.details;
     if (!admission || details?.type !== "policy_admission") {
       throw new EffectivePolicyError("not_found", "No admitted delegation matches this reference.");
     }
+    return { admission, details };
+  }
+
+  async #current(admissionId: string) {
+    const { admission, details } = this.#admission(admissionId);
     const current = await this.#prepare(details.requestId, details.sessionId);
     if (current.version.revision !== details.revision || current.fingerprint !== details.fingerprint) {
       throw new EffectivePolicyError("stale", "The admitted action, grant, policy or verification requirements changed.");
     }
-    return { ...current, admission };
+    return { ...current, admission, details };
   }
 
   #assignment(taskId: TaskId, sessionId: SessionId, value: unknown): WorkerAssignment {
@@ -281,8 +331,71 @@ export class EffectivePolicyService {
     return parsed.data;
   }
 
-  #source(plan: VerificationRun["plan"]) {
-    return this.axiom.snapshot({ root: plan.root, extraFiles: commandPaths(plan) });
+  #receipt(admissionId: EventId, taskId: TaskId, sessionId: SessionId, value: unknown, observation: WorkerObservation) {
+    const assignment = this.#assignment(taskId, sessionId, value);
+    const launch = this.options.store.getEvent(eventId("launch", admissionId))?.details;
+    if (launch?.type !== "policy_launch" || digest(launch.assignment) !== digest(assignment)) {
+      throw new EffectivePolicyError("invalid_input", "The native result must match the recorded launch.");
+    }
+    const snapshot = runtimeSessionSnapshotSchema.safeParse(observation?.snapshot);
+    const usage = usageSchema.safeParse(observation?.usage);
+    if (!snapshot.success || snapshot.data.taskId !== taskId || snapshot.data.sessionId !== sessionId
+      || !terminal.has(snapshot.data.status) || !usage.success || usage.data.sessionId !== sessionId) {
+      throw new EffectivePolicyError("invalid_input", "The exact native worker must have a settled observation.");
+    }
+    return { status: snapshot.data.status as SettlementDetails["status"], receiptDigest: digest([assignment, snapshot.data, usage.data]) };
+  }
+
+  #completedSettlement(admissionId: EventId) {
+    const event = this.options.store.getEvent(eventId("settlement", admissionId));
+    if (!event || event.details?.type !== "policy_settlement" || event.details.status !== "completed") {
+      throw new EffectivePolicyError("invalid_input", "Record the admitted worker’s successful native settlement before review.");
+    }
+    return { occurredAt: event.occurredAt, receiptDigest: event.details.receiptDigest };
+  }
+
+  async #inspect(current: IntegrationScope, input: IntegrationResult) {
+    const { admission, request, plan, version, guardedPaths } = current;
+    const result = this.#receipt(admission.id, request.task.id, request.session.id, input.assignment, input.observation);
+    if (this.#completedSettlement(admission.id).receiptDigest !== result.receiptDigest) {
+      throw new EffectivePolicyError("stale", "The worker observation changed after its recorded settlement.");
+    }
+    const root = await this.#workerRoot(plan.root, input.workerRoot);
+    const stage = this.options.store.getEvent(eventId("stage", admission.id))?.details;
+    if (stage?.type !== "policy_stage" || stage.workspaceDigest !== digest(root)) {
+      throw new EffectivePolicyError("forbidden", "The result must come from the workspace staged for the admitted worker.");
+    }
+    const [worker, outside, source] = await Promise.all([
+      this.#source(plan, root),
+      this.axiom.snapshot({ root, excludedPaths: plan.task.ownedPaths, extraFiles: guardedPaths }),
+      this.#source(plan),
+    ]);
+    if (outside.digest !== version.protectedSourceDigest || worker.digest !== source.digest) {
+      throw new EffectivePolicyError("stale", "The scoped worker result differs from the integrated checkout or changed protected files.");
+    }
+    return { source, receiptDigest: result.receiptDigest };
+  }
+
+  #requireIsolatedRoot(root: string): void {
+    for (const trusted of [this.axiom.evidenceRoot, this.axiom.axiomRoot]) {
+      if (trusted && (within(root, trusted) || within(trusted, root))) {
+        throw new EffectivePolicyError("forbidden", "The source and worker checkouts must stay separate from trusted Axiom and evidence.");
+      }
+    }
+  }
+
+  async #workerRoot(integrationRoot: string, value: string): Promise<string> {
+    if (!isAbsolute(value)) throw new EffectivePolicyError("invalid_input", "Use the native worker’s absolute workspace path.");
+    const root = await realpath(value);
+    this.#requireIsolatedRoot(root);
+    if (within(integrationRoot, root) || within(root, integrationRoot)) {
+      throw new EffectivePolicyError("forbidden", "The staged workspace must be separate from the integration checkout.");
+    }
+    return root;
+  }
+
+  #source(plan: VerificationRun["plan"], root = plan.root) {
+    return this.axiom.snapshot({ root, extraFiles: commandPaths(plan) });
   }
 
   #write(event: Event): Write {
