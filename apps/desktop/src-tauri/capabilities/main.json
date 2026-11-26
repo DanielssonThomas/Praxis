@@ -1,13 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Local host launch status and retry in the primary Praxis window.",
+  "description": "Scoped host, Manager, Overview, Activity and Kanban commands in the primary Praxis window.",
   "windows": ["main"],
   "permissions": [
     "allow-host-status", "allow-retry-host",
     "allow-unlock-manager", "allow-lock-manager", "allow-manager-turn",
     "allow-unlock-overview", "allow-lock-overview", "allow-read-overview", "allow-control-session",
     "allow-unlock-activity", "allow-lock-activity", "allow-read-activity",
-    "allow-inspect-activity", "allow-decide-activity"
+    "allow-inspect-activity", "allow-decide-activity",
+    "allow-kanban-list", "allow-kanban-unlock", "allow-kanban-lock",
+    "allow-kanban-link-issue", "allow-kanban-open-issue"
   ]
 }

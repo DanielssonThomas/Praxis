@@ -1,1 +1,20 @@
-p { color: var(--muted); }
+header,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+header {
+  justify-content: space-between;
+}
+
+#kanban-status,
+#kanban-provider {
+  color: var(--muted);
+}
+
+.quiet {
+  margin: 0;
+}
