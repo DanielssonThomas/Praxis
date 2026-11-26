@@ -19,6 +19,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "read_activity",
         "inspect_activity",
         "decide_activity",
+        "unlock_reports",
+        "lock_reports",
+        "read_reports",
+        "save_report_preferences",
+        "clear_report_history",
+        "read_settings",
+        "save_settings",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(commands))?;
     Ok(())

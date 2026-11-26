@@ -25,6 +25,10 @@ impl WorkflowError {
     pub(crate) fn new(code: WorkflowErrorCode, message: &'static str) -> Self {
         Self { code, message }
     }
+
+    pub(crate) fn is_denied(&self) -> bool {
+        matches!(self.code, WorkflowErrorCode::Denied)
+    }
 }
 
 impl From<IpcError> for WorkflowError {

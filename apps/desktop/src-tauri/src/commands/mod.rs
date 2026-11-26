@@ -3,6 +3,8 @@ pub(crate) mod host;
 pub(crate) mod kanban;
 pub(crate) mod manager;
 pub(crate) mod overview;
+mod reports;
+mod settings;
 
 use tauri::Wry;
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands};
@@ -29,6 +31,13 @@ pub(crate) fn registry() -> Builder<Wry> {
             activity::read_activity,
             activity::inspect_activity,
             activity::decide_activity,
+            reports::unlock_reports,
+            reports::lock_reports,
+            reports::read_reports,
+            reports::save_report_preferences,
+            reports::clear_report_history,
+            settings::read_settings,
+            settings::save_settings,
         ])
         .error_handling(ErrorHandlingMode::Result)
 }
