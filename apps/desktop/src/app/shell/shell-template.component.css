@@ -1,0 +1,12 @@
+:host {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  block-size: 100dvh;
+  overflow: hidden;
+}
+
+main {
+  min-inline-size: 0;
+  overflow: auto;
+  padding: clamp(1rem, 5vw, 3rem);
+}

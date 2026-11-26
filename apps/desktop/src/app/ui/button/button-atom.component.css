@@ -1,0 +1,18 @@
+:host {
+  font: inherit;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  color: var(--text);
+  background: var(--panel);
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
+
+:host(:hover) { background: var(--accent-soft); }
+
+:host([type="submit"]) {
+  background: var(--accent);
+  color: var(--button-text);
+  border-color: var(--accent);
+  font-weight: 650;
+}

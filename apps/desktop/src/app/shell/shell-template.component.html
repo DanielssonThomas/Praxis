@@ -1,0 +1,9 @@
+<praxis-shell-menu [views]="views" [activeView]="navigation.view().id" />
+<main>
+  <router-outlet />
+</main>
+<praxis-command-bar
+  [command]="navigation.command"
+  [feedback]="feedback()"
+  (commandSubmitted)="submit($event)"
+/>

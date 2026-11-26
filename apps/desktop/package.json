@@ -1,0 +1,27 @@
+{
+  "name": "@praxis/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "ng build",
+    "start": "ng serve",
+    "typecheck": "ngc --noEmit --project tsconfig.app.json",
+    "check:composition": "node scripts/check-composition.mjs",
+    "test": "node --test src/app/shell/shell-template.browser.mjs"
+  },
+  "dependencies": {
+    "@angular/common": "21.2.26",
+    "@angular/compiler": "21.2.26",
+    "@angular/core": "21.2.26",
+    "@angular/forms": "21.2.26",
+    "@angular/platform-browser": "21.2.26",
+    "@angular/router": "21.2.26",
+    "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "@angular/build": "21.2.31",
+    "@angular/cli": "21.2.31",
+    "@angular/compiler-cli": "21.2.26"
+  }
+}

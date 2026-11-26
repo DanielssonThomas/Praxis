@@ -2,7 +2,7 @@
   "name": "praxis",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": ["packages/*", "apps/*"],
   "engines": {
     "node": "24.x",
     "npm": "11.x"
@@ -13,6 +13,10 @@
     "test:management:live": "node --test tests/runtime/management.live.mjs",
     "mcp": "node packages/mcp/dist/cli.js",
     "test": "npm run build && node --test",
+    "start:desktop": "npm run start --workspace @praxis/desktop",
+    "build:desktop": "npm run build --workspace @praxis/desktop",
+    "test:desktop": "npm run test --workspace @praxis/desktop",
+    "check:desktop-composition": "npm run check:composition --workspace @praxis/desktop",
     "test:browser": "node --test tests/browser/shell.browser.mjs",
     "test:hermes": "node --test tests/runtime/hermes.live.mjs",
     "test:mcp:live": "node --test tests/runtime/mcp.live.mjs",
@@ -20,8 +24,8 @@
     "test:kanban:live": "node --test tests/runtime/kanban.live.mjs",
     "test:overview:live": "node --test tests/runtime/overview.live.mjs",
     "test:control:live": "node --test tests/runtime/control.live.mjs",
-    "typecheck": "tsc --project tsconfig.json",
-    "build": "tsc --project packages/contracts/tsconfig.json && tsc --project packages/state/tsconfig.json && tsc --project packages/settings/tsconfig.json && tsc --project packages/hermes-runtime/tsconfig.json && tsc --project packages/mcp/tsconfig.json && tsc --project packages/management/tsconfig.json && tsc --project packages/approvals/tsconfig.json && tsc --project packages/kanban/tsconfig.json && tsc --project packages/shell/tsconfig.json"
+    "typecheck": "tsc --project tsconfig.json && npm run typecheck --workspace @praxis/desktop",
+    "build": "tsc --project packages/contracts/tsconfig.json && tsc --project packages/state/tsconfig.json && tsc --project packages/settings/tsconfig.json && tsc --project packages/hermes-runtime/tsconfig.json && tsc --project packages/mcp/tsconfig.json && tsc --project packages/management/tsconfig.json && tsc --project packages/approvals/tsconfig.json && tsc --project packages/kanban/tsconfig.json && tsc --project packages/shell/tsconfig.json && npm run build:desktop"
   },
   "devDependencies": {
     "playwright": "1.65.1",

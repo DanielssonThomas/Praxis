@@ -1,0 +1,27 @@
+header {
+  background: var(--panel);
+  border-block-end: 1px solid var(--border);
+}
+
+.header-row, nav {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding-inline: var(--shell-gutter);
+}
+
+.header-row { min-block-size: 3.5rem; justify-content: space-between; }
+.brand { font-weight: 700; letter-spacing: -0.025em; }
+nav { flex-wrap: wrap; padding-block-end: 0.65rem; }
+
+a {
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 0.35rem;
+  padding: 0.35rem 0.65rem;
+}
+
+a:hover, a[aria-current="page"] {
+  color: var(--accent);
+  background: var(--accent-soft);
+}

@@ -2,9 +2,9 @@
 
 ## Runtime and desktop target
 
-Praxis uses Node.js 24 and TypeScript for its local application, npm workspaces to share packages, and a locked dependency graph. Start with a browser desktop surface served by a local Node process. Browser-native HTML, CSS and TypeScript are sufficient for the application shell. Package the local host and UI together for v1 setup, targeting Linux first for verification. Release packaging and other OS support depend on the evidence in [#24](https://github.com/DanielssonThomas/Praxis/issues/24).
+Praxis v1 ships an Angular application in a Tauri desktop window, targeting Linux x64 first. The [desktop development guide](desktop.md) covers the Angular workspace, atomic UI composition and production bundle. Tauri owns desktop startup, local host supervision and the native IPC boundary. Release readiness and platform coverage follow verified evidence in [#24](https://github.com/DanielssonThomas/Praxis/issues/24).
 
-The local host listens on loopback and owns credentials and operational storage outside the browser. The browser renders local state and sends requests to that host. Hermes runs separately and owns orchestration, dispatch and native session lifecycles. The [Hermes runtime adapter](hermes-runtime.md) maps native run identifiers and capabilities into Praxis session snapshots. Closing Praxis leaves Hermes work running.
+The existing Node.js 24 host listens on loopback and owns credentials, execution authority and operational storage. Angular renders local state and uses the desktop bridge to request host operations. Hermes runs separately and owns orchestration, dispatch and native session lifecycles. The [Hermes runtime adapter](hermes-runtime.md) maps native run identifiers and capabilities into Praxis session snapshots. Closing Praxis leaves independently running Hermes work active.
 
 ## Shared contracts
 

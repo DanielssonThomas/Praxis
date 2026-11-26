@@ -1,0 +1,22 @@
+<header>
+  <div class="header-row">
+    <span class="brand">Praxis</span>
+    <button
+      praxisButton
+      #toggle
+      type="button"
+      aria-controls="main-navigation"
+      [attr.aria-expanded]="open()"
+      (click)="open.set(!open())"
+    >Menu</button>
+  </div>
+  <nav id="main-navigation" aria-label="Main navigation" [hidden]="!open()">
+    @for (view of views(); track view.id) {
+      <a
+        [routerLink]="['/', view.id]"
+        [attr.aria-current]="activeView() === view.id ? 'page' : null"
+        (click)="close($event)"
+      >{{ view.label }}</a>
+    }
+  </nav>
+</header>
