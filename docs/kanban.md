@@ -16,3 +16,15 @@ Enter an issue as `owner/repo#42` on its task card. Praxis confirms the exact is
 After building, run `npm test` for projection, provider denial, input validation and durable replay cases. Set `PRAXIS_HERMES_BIN` and run `npm run test:kanban:live` for the browser, real Hermes CLI and an authenticated loopback GitHub API fixture. It verifies native ready → blocked → ready transitions, operator scope, the exact provider lookup and persisted issue identity.
 
 The live fixture uses Hermes Agent v0.23.3 at `caafe5389ae585ef77387a962aee05b1bcf17029`, Python 3.14.10, Node.js 24.22.3 and Chromium 156.0.8078.79 on Linux x64.
+
+## Desktop verification
+
+In the packaged desktop, run `/kanban` or `/k` and enter the operator token when prompted. The native bridge reads the local host's projection and uses the existing scoped provider verification to save a link. Select a verified issue to open it in the Linux desktop's default browser. The opener uses GIO and receives only the information it needs to hand off the HTTPS address.
+
+Build and [package for Linux x64](desktop.md). Supply `PRAXIS_HERMES_BIN` and the absolute development package path in `PRAXIS_DESKTOP_DEB`, then run:
+
+```sh
+GDK_BACKEND=x11 xvfb-run -a dbus-run-session -- node --test tests/runtime/desktop-kanban.live.mjs
+```
+
+The native fixture uses an isolated Hermes board, an authenticated loopback GitHub provider, and a local browser handoff recorder. It checks ready → blocked → ready, missing setup and provider states, operator and provider refusal, one durable link after retry, and keyboard operation at a 390 × 700 viewport.

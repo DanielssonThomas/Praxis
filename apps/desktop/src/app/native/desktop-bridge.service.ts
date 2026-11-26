@@ -18,6 +18,11 @@ export class DesktopBridge {
   readonly unlockOverview = commands.unlockOverview;
   readonly lockOverview = commands.lockOverview;
   readonly readOverview = commands.readOverview;
+  readonly kanbanList = commands.kanbanList;
+  readonly kanbanUnlock = commands.kanbanUnlock;
+  readonly kanbanLock = commands.kanbanLock;
+  readonly kanbanLinkIssue = commands.kanbanLinkIssue;
+  readonly kanbanOpenIssue = commands.kanbanOpenIssue;
 
   managerTurn(request: ManagerTurnRequest, onFrame: (frame: ManagerFrame) => void) {
     const output = new Channel<ManagerFrame>();

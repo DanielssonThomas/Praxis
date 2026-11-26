@@ -7,6 +7,11 @@ import type { InvokeOptions } from "@tauri-apps/api/core";
 export const commands = {
 	hostStatus: (options?: InvokeOptions) => typedError<HostStatus_Serialize, IpcError>(__TAURI_INVOKE("host_status", undefined, options)),
 	retryHost: (options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("retry_host", undefined, options)),
+	kanbanList: (options?: InvokeOptions) => typedError<KanbanBoard_Serialize, KanbanError>(__TAURI_INVOKE("kanban_list", undefined, options)),
+	kanbanUnlock: (credential: string, options?: InvokeOptions) => typedError<KanbanBoard_Serialize, KanbanError>(__TAURI_INVOKE("kanban_unlock", { credential }, options)),
+	kanbanLock: (options?: InvokeOptions) => __TAURI_INVOKE<void>("kanban_lock", undefined, options),
+	kanbanLinkIssue: (target: KanbanIssueTarget, options?: InvokeOptions) => typedError<KanbanLinkReceipt, KanbanError>(__TAURI_INVOKE("kanban_link_issue", { target }, options)),
+	kanbanOpenIssue: (target: KanbanIssueTarget, options?: InvokeOptions) => typedError<null, KanbanError>(__TAURI_INVOKE("kanban_open_issue", { target }, options)),
 	unlockManager: (token: string, options?: InvokeOptions) => typedError<ManagerMessage[], WorkflowError>(__TAURI_INVOKE("unlock_manager", { token }, options)),
 	lockManager: (options?: InvokeOptions) => __TAURI_INVOKE<void>("lock_manager", undefined, options),
 	managerTurn: (request: ManagerTurnRequest, output: Channel<ManagerFrame_Deserialize>, options?: InvokeOptions) => typedError<null, WorkflowError>(__TAURI_INVOKE("manager_turn", { request, output }, options)),
@@ -38,6 +43,76 @@ export type IpcError = {
 };
 
 export type IpcErrorCode = "host_unavailable" | "host_timed_out" | "invalid_host_response" | "host_retry_failed";
+
+export type IssueNumber = number;
+
+export type IssueProvider = "github";
+
+export type KanbanBoard = KanbanBoard_Serialize | KanbanBoard_Deserialize;
+
+export type KanbanBoard_Deserialize = {
+	tasks: KanbanTask_Deserialize[],
+	provider: KanbanProvider_Deserialize,
+};
+
+export type KanbanBoard_Serialize = {
+	tasks: KanbanTask_Serialize[],
+	provider: KanbanProvider_Serialize,
+};
+
+export type KanbanError = { kind: "host"; details: IpcError } | { kind: "setup_required" } | { kind: "operator_required" } | { kind: "scope_unavailable" } | { kind: "invalid_issue" } | { kind: "issue_not_found" } | { kind: "provider_denied" } | { kind: "board_unavailable" } | { kind: "browser_unavailable" };
+
+export type KanbanIssue = {
+	provider: IssueProvider,
+	repository: string,
+	number: IssueNumber,
+};
+
+export type KanbanIssueTarget = {
+	nativeId: string,
+	repository: string,
+	number: IssueNumber,
+};
+
+export type KanbanLinkReceipt = {
+	taskId: string,
+	issue: KanbanIssue,
+};
+
+export type KanbanProvider = KanbanProvider_Serialize | KanbanProvider_Deserialize;
+
+export type KanbanProvider_Deserialize = {
+	available: boolean,
+	reason?: string | null,
+};
+
+export type KanbanProvider_Serialize = {
+	available: boolean,
+	reason: string | null,
+};
+
+export type KanbanTask = KanbanTask_Serialize | KanbanTask_Deserialize;
+
+export type KanbanTaskIdentity = {
+	id: string,
+	title: string,
+};
+
+export type KanbanTask_Deserialize = {
+	nativeId: string,
+	task: KanbanTaskIdentity,
+	status: string,
+	assignee?: string | null,
+	links: KanbanIssue[],
+};
+
+export type KanbanTask_Serialize = {
+	nativeId: string,
+	task: KanbanTaskIdentity,
+	status: string,
+	assignee: string | null,
+	links: KanbanIssue[],
+};
 
 export type ManagerFrame = ManagerFrame_Serialize | ManagerFrame_Deserialize;
 

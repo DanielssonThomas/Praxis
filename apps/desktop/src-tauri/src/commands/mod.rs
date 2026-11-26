@@ -1,4 +1,5 @@
 pub(crate) mod host;
+pub(crate) mod kanban;
 pub(crate) mod manager;
 pub(crate) mod overview;
 
@@ -10,6 +11,11 @@ pub(crate) fn registry() -> Builder<Wry> {
         .commands(collect_commands![
             host::host_status,
             host::retry_host,
+            kanban::kanban_list,
+            kanban::kanban_unlock,
+            kanban::kanban_lock,
+            kanban::kanban_link_issue,
+            kanban::kanban_open_issue,
             manager::unlock_manager,
             manager::lock_manager,
             manager::manager_turn,
