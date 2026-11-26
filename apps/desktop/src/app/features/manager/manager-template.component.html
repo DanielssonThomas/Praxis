@@ -1,17 +1,31 @@
 <header>
-  <h1>Manager</h1>
+  <h1 [class.visually-hidden]="manager.unlocked()">Manager</h1>
   @if (manager.unlocked()) {
+    <p class="connection-limits">Context window and compaction unavailable</p>
     <button praxisButton type="button" id="manager-lock" (click)="manager.lock()">Lock manager</button>
   }
 </header>
-@if (manager.supported && !manager.unlocked()) {
-  <praxis-operator-unlock formName="Open Manager" action="Open manager"
-    [busy]="manager.unlocking()" (credentialSubmitted)="manager.unlock($event)" />
-}
-<p role="status">{{ manager.status() }}</p>
-@if (manager.unlocked()) {
-  <praxis-manager-conversation />
-  @if (manager.reconnectable()) {
-    <button praxisButton type="button" id="manager-reconnect" (click)="manager.reconnect()">Reconnect</button>
+
+<div class="workspace">
+  <div class="connection">
+    <p role="status">{{ manager.status() }}</p>
+    @if (manager.unlocked() && manager.reconnectable()) {
+      <button praxisButton type="button" id="manager-reconnect" (click)="manager.reconnect()">Reconnect</button>
+    }
+  </div>
+
+  @if (manager.unlocked()) {
+    @if (manager.history().length || manager.turns().length) {
+      <praxis-manager-conversation />
+    } @else {
+      <section class="start" aria-labelledby="manager-start">
+        <span class="mark" aria-hidden="true"></span>
+        <h2 id="manager-start">What are we working on?</h2>
+        <p>Send a message to start working with your manager.</p>
+      </section>
+    }
+  } @else if (manager.supported) {
+    <praxis-operator-unlock formName="Open Manager" action="Open manager"
+      [busy]="manager.unlocking()" (credentialSubmitted)="manager.unlock($event)" />
   }
-}
+</div>
