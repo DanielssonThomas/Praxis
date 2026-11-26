@@ -108,8 +108,8 @@ test("packaged Settings edits an existing portable file, rejects invalid setting
   await saveSettings(settings, initial);
   let app = await open();
   await navigate(app, "Settings");
-  assert.equal(await app.execute("return !!document.querySelector(arguments[0])", portableForm), true,
-    "The packaged Settings page should offer the portable editor.");
+  await eventually(() => app.execute("return !!document.querySelector(arguments[0])", portableForm),
+    "The packaged Settings page did not open the portable editor after reading the local host.");
   await eventually(() => app.execute("return document.querySelector('[name=managerProfile]')?.value === 'existing-manager'"),
     "The desktop editor did not read the existing settings.");
   await assertNarrow(app);
