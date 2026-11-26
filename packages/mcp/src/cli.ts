@@ -5,6 +5,8 @@ import { readSettings, settingsPath } from "@praxis/settings";
 import { OperationalStore } from "@praxis/state";
 import { createPraxisMcpServer, mcpAuthoritySchema } from "./index.js";
 import { MemoryError, ProjectMemory } from "./memory.js";
+import { loadSkillValidator } from "./skills-axiom.js";
+import { CuratedSkills } from "./skills.js";
 
 const authorityFile = process.env.PRAXIS_MCP_CONFIG_FILE;
 if (!authorityFile) throw new Error("Set PRAXIS_MCP_CONFIG_FILE to the user-owned MCP authority file.");
@@ -25,7 +27,7 @@ async function manageMemory(args: string[]): Promise<void> {
   }
 }
 
-function serve(): void {
+async function serve(): Promise<void> {
   const port = Number(process.env.PRAXIS_MCP_PORT ?? 3211);
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error("Set PRAXIS_MCP_PORT to an integer from 0 to 65535.");
   const origin = process.env.PRAXIS_HERMES_ORIGIN;
@@ -33,13 +35,21 @@ function serve(): void {
   if (Boolean(origin) !== Boolean(apiKey)) throw new Error("Set both PRAXIS_HERMES_ORIGIN and PRAXIS_HERMES_API_KEY to enable native inspection.");
 
   const runtime = origin && apiKey ? new HermesRuntime({ origin, apiKey }) : undefined;
+  const validate = config.skills && await loadSkillValidator(process.env.PRAXIS_AXIOM_ROOT ?? "");
   const store = new OperationalStore(config.database);
+  const skills = config.skills && validate && {
+    service: new CuratedSkills({ directory: resolve(dirname(authorityFile!), config.skills.directory), validate }),
+    curatorPrincipalId: config.skills.curatorPrincipalId,
+  };
   const path = settingsPath();
   const server = createPraxisMcpServer({
-    store, grants: config.grants, runtime,
+    store, grants: config.grants, runtime, skills,
     memory: memory && { service: memory, enabled: async () => (await readSettings(path)).memory.enabled },
   });
-  server.once("close", () => store.close());
+  server.once("close", () => {
+    skills?.service.close();
+    store.close();
+  });
   server.listen(port, "127.0.0.1", () => {
     const address = server.address();
     if (address !== null && typeof address !== "string") {
@@ -49,5 +59,5 @@ function serve(): void {
 }
 
 const args = process.argv.slice(2);
-if (args.length === 0) serve();
+if (args.length === 0) await serve();
 else await manageMemory(args);

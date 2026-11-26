@@ -11,6 +11,8 @@ import type {
   WorkerAssignment, WorkerAssignmentRequest, WorkerCapabilities, WorkerExecutor, WorkerObservation,
 } from "@praxis/contracts";
 import { loadAxiom } from "./axiom.js";
+import { stageCuratedSkills } from "./curated-skills.js";
+import type { CodexSkillResource } from "./curated-skills.js";
 import { CodexRun } from "./native.js";
 
 const execute = promisify(execFile);
@@ -38,6 +40,7 @@ export interface CodexExecutorOptions {
   model: string;
   prepareWorkspace?: (scope: Staging) => Promise<void>;
   prepareProfile?: (scope: Staging) => Promise<void>;
+  selectedSkills?: (scope: Pick<Staging, "task" | "session" | "signal">) => Promise<readonly CodexSkillResource[]>;
 }
 
 type ErrorCode = "invalid_input" | "unsupported" | "assignment_mismatch" | "not_found" | "unavailable";
@@ -146,6 +149,10 @@ export class CodexExecutor implements WorkerExecutor {
       const staging = { workspace, codexHome, userHome, task, session, signal };
       await this.#options.prepareWorkspace?.(staging);
       await this.#options.prepareProfile?.(staging);
+      if (this.#options.selectedSkills) {
+        const selected = await this.#options.selectedSkills({ task, session, signal });
+        await stageCuratedSkills(userHome, selected, signal);
+      }
       signal.throwIfAborted();
       const profile = { program: this.#options.program, workspace, home: codexHome, userHome, environment: environment() };
       await axiom.prepare(profile, brief, privatePaths[2], signal);
