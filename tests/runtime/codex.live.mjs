@@ -136,6 +136,9 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
       "requires_openai_auth = false", "request_max_retries = 0", "stream_max_retries = 0",
     ].join("\n")),
     prepareWorkspace: ({ workspace }) => writeFile(join(workspace, "fixture.txt"), fixture),
+    authorizeLaunch: async ({ task }) => {
+      if (task.id === "task_denied_at_start") throw new Error("The fixture approval became stale after staging.");
+    },
   });
   const host = await codex.capabilities();
   assert.deepEqual(host.host, { runtime: "codex", version: "0.172.0-alpha.2", os: "linux", architecture: "x64", surface: "cli" });
@@ -146,6 +149,7 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
   const unrelated = requestFor("unrelated");
   unrelated.brief.id = "task_different";
   await assert.rejects(codex.createAssignment(unrelated), { code: "invalid_input" });
+  await assert.rejects(codex.createAssignment(requestFor("denied_at_start")), { code: "unavailable" });
   const attempts = await Promise.all([codex.createAssignment(requestFor("complete")), codex.createAssignment(requestFor("cancel"))]);
   const [complete, stop] = attempts;
 
