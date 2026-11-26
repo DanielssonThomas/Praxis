@@ -14,8 +14,10 @@
     <label><input type="checkbox" name="collectionEnabled" [checked]="preferences().collectionEnabled"> Enable report collection</label>
     <label>
       Retain report history
-      <select name="retentionDays" [value]="preferences().retentionDays">
-        @for (days of ranges; track days) { <option [value]="days">{{ days }} days</option> }
+      <select name="retentionDays">
+        @for (days of ranges; track days) {
+          <option [value]="days" [selected]="days === preferences().retentionDays">{{ days }} days</option>
+        }
       </select>
     </label>
     <label><input type="checkbox" name="allowExport" [checked]="preferences().allowExport"> Allow report export</label>

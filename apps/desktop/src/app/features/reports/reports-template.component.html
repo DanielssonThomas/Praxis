@@ -4,9 +4,10 @@
   <div class="controls">
     <label>
       Range
-      <select #range name="reportRange" [value]="current.days" [disabled]="busy()" (change)="changeRange(range)">
+      <select #range name="reportRange" [disabled]="busy()" (change)="changeRange(range)">
         @for (days of ranges; track days) {
-          <option [value]="days" [disabled]="days > current.preferences.retentionDays">{{ days }} days</option>
+          <option [value]="days" [selected]="days === current.days"
+            [disabled]="days > current.preferences.retentionDays">{{ days }} days</option>
         }
       </select>
     </label>

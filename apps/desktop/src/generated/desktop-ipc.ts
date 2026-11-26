@@ -7,9 +7,32 @@ import type { InvokeOptions } from "@tauri-apps/api/core";
 export const commands = {
 	hostStatus: (options?: InvokeOptions) => typedError<HostStatus_Serialize, IpcError>(__TAURI_INVOKE("host_status", undefined, options)),
 	retryHost: (options?: InvokeOptions) => typedError<null, IpcError>(__TAURI_INVOKE("retry_host", undefined, options)),
+	unlockReports: (request: ReportUnlock, options?: InvokeOptions) => typedError<ReportResult_Serialize, IpcError>(__TAURI_INVOKE("unlock_reports", { request }, options)),
+	lockReports: (options?: InvokeOptions) => __TAURI_INVOKE<void>("lock_reports", undefined, options),
+	readReports: (days: number, options?: InvokeOptions) => typedError<ReportResult_Serialize, IpcError>(__TAURI_INVOKE("read_reports", { days }, options)),
+	saveReportPreferences: (request: ReportPreferenceUpdate_Deserialize, options?: InvokeOptions) => typedError<ReportResult_Serialize, IpcError>(__TAURI_INVOKE("save_report_preferences", { request }, options)),
+	clearReportHistory: (days: number, confirmation: ReportHistoryConfirmation, options?: InvokeOptions) => typedError<ReportResult_Serialize, IpcError>(__TAURI_INVOKE("clear_report_history", { days, confirmation }, options)),
+	readSettings: (options?: InvokeOptions) => typedError<PortableSettings_Serialize, IpcError>(__TAURI_INVOKE("read_settings", undefined, options)),
+	saveSettings: (settings: PortableSettings_Deserialize, options?: InvokeOptions) => typedError<PortableSettings_Serialize, IpcError>(__TAURI_INVOKE("save_settings", { settings }, options)),
 };
 
 /* Types */
+export type BudgetPreferences = BudgetPreferences_Serialize | BudgetPreferences_Deserialize;
+
+export type BudgetPreferences_Deserialize = {
+	maxTaskTokens?: number | null,
+	maxTaskUsd?: number | null,
+};
+
+export type BudgetPreferences_Serialize = {
+	maxTaskTokens: number | null,
+	maxTaskUsd: number | null,
+};
+
+export type DisplayPreferences = {
+	autoPresent: boolean,
+};
+
 export type HostStage = "starting" | "ready";
 
 export type HostStatus = HostStatus_Serialize | HostStatus_Deserialize;
@@ -31,7 +54,161 @@ export type IpcError = {
 	message: string,
 };
 
-export type IpcErrorCode = "host_unavailable" | "host_timed_out" | "invalid_host_response" | "host_retry_failed";
+export type IpcErrorCode = "host_unavailable" | "host_timed_out" | "invalid_host_response" | "host_retry_failed" | "feature_unavailable" | "invalid_input" | "operator_credential_required" | "operator_credential_rejected" | "operation_rejected";
+
+export type ManagerPreferences = ManagerPreferences_Serialize | ManagerPreferences_Deserialize;
+
+export type ManagerPreferences_Deserialize = {
+	runtime: ManagerRuntime,
+	profile: string,
+	model?: string | null,
+};
+
+export type ManagerPreferences_Serialize = {
+	runtime: ManagerRuntime,
+	profile: string,
+	model: string | null,
+};
+
+export type ManagerRuntime = "hermes";
+
+export type MemoryPreferences = {
+	enabled: boolean,
+};
+
+export type PolicyPreferences = {
+	axiomEnabled: boolean,
+	profiles: string[],
+};
+
+export type PortableSettings = PortableSettings_Serialize | PortableSettings_Deserialize;
+
+export type PortableSettings_Deserialize = {
+	schemaVersion: number,
+	policy: PolicyPreferences,
+	manager: ManagerPreferences_Deserialize,
+	worker: WorkerPreferences_Deserialize,
+	budgets: BudgetPreferences_Deserialize,
+	memory: MemoryPreferences,
+	display: DisplayPreferences,
+	reports?: ReportPreferences_Deserialize | null,
+};
+
+export type PortableSettings_Serialize = {
+	schemaVersion: number,
+	policy: PolicyPreferences,
+	manager: ManagerPreferences_Serialize,
+	worker: WorkerPreferences_Serialize,
+	budgets: BudgetPreferences_Serialize,
+	memory: MemoryPreferences,
+	display: DisplayPreferences,
+	reports?: ReportPreferences_Serialize,
+};
+
+export type ReportBucket = ReportBucket_Serialize | ReportBucket_Deserialize;
+
+export type ReportBucket_Deserialize = {
+	day: string,
+	metrics: ReportMetricValues_Deserialize,
+};
+
+export type ReportBucket_Serialize = {
+	day: string,
+	metrics: ReportMetricValues_Serialize,
+};
+
+export type ReportHistoryConfirmation = {
+	confirmed: boolean,
+};
+
+export type ReportMetric = "prsOpened" | "prsMerged" | "ticketsCompleted" | "taskMinutes" | "tokens" | "costUsd" | "interventions";
+
+export type ReportMetricValues = ReportMetricValues_Serialize | ReportMetricValues_Deserialize;
+
+export type ReportMetricValues_Deserialize = {
+	prsOpened?: number | null,
+	prsMerged?: number | null,
+	ticketsCompleted?: number | null,
+	taskMinutes?: number | null,
+	tokens?: number | null,
+	costUsd?: number | null,
+	interventions?: number | null,
+};
+
+export type ReportMetricValues_Serialize = {
+	prsOpened: number | null,
+	prsMerged: number | null,
+	ticketsCompleted: number | null,
+	taskMinutes: number | null,
+	tokens: number | null,
+	costUsd: number | null,
+	interventions: number | null,
+};
+
+export type ReportPreferenceUpdate = ReportPreferenceUpdate_Serialize | ReportPreferenceUpdate_Deserialize;
+
+export type ReportPreferenceUpdate_Deserialize = {
+	days: number,
+	preferences: ReportPreferences_Deserialize,
+};
+
+export type ReportPreferenceUpdate_Serialize = {
+	days: number,
+	preferences: ReportPreferences_Serialize,
+};
+
+export type ReportPreferences = ReportPreferences_Serialize | ReportPreferences_Deserialize;
+
+export type ReportPreferences_Deserialize = {
+	collectionEnabled: boolean,
+	retentionDays: number,
+	visibleMetrics: ReportMetric[],
+	allowExport: boolean,
+	allowClearHistory: boolean,
+	clearedBefore?: string | null,
+};
+
+export type ReportPreferences_Serialize = {
+	collectionEnabled: boolean,
+	retentionDays: number,
+	visibleMetrics: ReportMetric[],
+	allowExport: boolean,
+	allowClearHistory: boolean,
+	clearedBefore?: string,
+};
+
+export type ReportResult = ReportResult_Serialize | ReportResult_Deserialize;
+
+export type ReportResult_Deserialize = {
+	days: number,
+	buckets: ReportBucket_Deserialize[],
+	preferences: ReportPreferences_Deserialize,
+};
+
+export type ReportResult_Serialize = {
+	days: number,
+	buckets: ReportBucket_Serialize[],
+	preferences: ReportPreferences_Serialize,
+};
+
+export type ReportUnlock = {
+	credential: string,
+	days: number,
+};
+
+export type WorkerPreferences = WorkerPreferences_Serialize | WorkerPreferences_Deserialize;
+
+export type WorkerPreferences_Deserialize = {
+	runtime: WorkerRuntime,
+	model?: string | null,
+};
+
+export type WorkerPreferences_Serialize = {
+	runtime: WorkerRuntime,
+	model: string | null,
+};
+
+export type WorkerRuntime = "codex" | "claude" | "hermes";
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
