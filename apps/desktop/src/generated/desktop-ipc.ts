@@ -13,13 +13,13 @@ export const commands = {
 	unlockOverview: (token: string, options?: InvokeOptions) => typedError<OverviewProjection_Serialize, WorkflowError>(__TAURI_INVOKE("unlock_overview", { token }, options)),
 	lockOverview: (options?: InvokeOptions) => __TAURI_INVOKE<void>("lock_overview", undefined, options),
 	readOverview: (options?: InvokeOptions) => typedError<OverviewProjection_Serialize, WorkflowError>(__TAURI_INVOKE("read_overview", undefined, options)),
-	unlockReports: (request: ReportUnlock, options?: InvokeOptions) => typedError<ReportResult_Serialize, IpcError>(__TAURI_INVOKE("unlock_reports", { request }, options)),
+	unlockReports: (request: ReportUnlock, options?: InvokeOptions) => typedError<ReportResult_Serialize, WorkflowError>(__TAURI_INVOKE("unlock_reports", { request }, options)),
 	lockReports: (options?: InvokeOptions) => __TAURI_INVOKE<void>("lock_reports", undefined, options),
-	readReports: (days: number, options?: InvokeOptions) => typedError<ReportResult_Serialize, IpcError>(__TAURI_INVOKE("read_reports", { days }, options)),
-	saveReportPreferences: (request: ReportPreferenceUpdate_Deserialize, options?: InvokeOptions) => typedError<ReportResult_Serialize, IpcError>(__TAURI_INVOKE("save_report_preferences", { request }, options)),
-	clearReportHistory: (days: number, confirmation: ReportHistoryConfirmation, options?: InvokeOptions) => typedError<ReportResult_Serialize, IpcError>(__TAURI_INVOKE("clear_report_history", { days, confirmation }, options)),
-	readSettings: (options?: InvokeOptions) => typedError<PortableSettings_Serialize, IpcError>(__TAURI_INVOKE("read_settings", undefined, options)),
-	saveSettings: (settings: PortableSettings_Deserialize, options?: InvokeOptions) => typedError<PortableSettings_Serialize, IpcError>(__TAURI_INVOKE("save_settings", { settings }, options)),
+	readReports: (days: number, options?: InvokeOptions) => typedError<ReportResult_Serialize, WorkflowError>(__TAURI_INVOKE("read_reports", { days }, options)),
+	saveReportPreferences: (request: ReportPreferenceUpdate_Deserialize, options?: InvokeOptions) => typedError<ReportResult_Serialize, WorkflowError>(__TAURI_INVOKE("save_report_preferences", { request }, options)),
+	clearReportHistory: (days: number, confirmation: ReportHistoryConfirmation, options?: InvokeOptions) => typedError<ReportResult_Serialize, WorkflowError>(__TAURI_INVOKE("clear_report_history", { days, confirmation }, options)),
+	readSettings: (options?: InvokeOptions) => typedError<PortableSettings_Serialize, WorkflowError>(__TAURI_INVOKE("read_settings", undefined, options)),
+	saveSettings: (settings: PortableSettings_Deserialize, options?: InvokeOptions) => typedError<PortableSettings_Serialize, WorkflowError>(__TAURI_INVOKE("save_settings", { settings }, options)),
 };
 
 /* Types */
@@ -60,7 +60,7 @@ export type IpcError = {
 	message: string,
 };
 
-export type IpcErrorCode = "host_unavailable" | "host_timed_out" | "invalid_host_response" | "host_retry_failed" | "feature_unavailable" | "invalid_input" | "operator_credential_required" | "operator_credential_rejected" | "operation_rejected";
+export type IpcErrorCode = "host_unavailable" | "host_timed_out" | "invalid_host_response" | "host_retry_failed";
 
 export type ManagerFrame = ManagerFrame_Serialize | ManagerFrame_Deserialize;
 

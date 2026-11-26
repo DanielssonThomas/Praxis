@@ -93,8 +93,8 @@ export class ReportsTemplate {
     try {
       const result = await work();
       if (result.status === "error") {
-        const credentialRequired = result.error.code === "operator_credential_required";
-        if (credentialRequired || result.error.code === "operator_credential_rejected") {
+        const credentialRequired = result.error.code === "locked";
+        if (credentialRequired || result.error.code === "denied") {
           this.report.set(null);
           this.visible.set([]);
           this.confirmingClear.set(false);

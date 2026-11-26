@@ -1,7 +1,7 @@
-use crate::models::ipc_error::IpcError;
 use crate::models::reports::{
     ReportHistoryConfirmation, ReportPreferenceUpdate, ReportResult, ReportUnlock,
 };
+use crate::models::workflow_error::WorkflowError;
 use crate::services::host_http::HostClient;
 use crate::services::reports::{self, ReportOperation};
 use crate::state::host::ManagedHost;
@@ -15,7 +15,7 @@ pub(crate) async fn unlock_reports(
     client: State<'_, HostClient>,
     sessions: State<'_, OperatorSessions>,
     request: ReportUnlock,
-) -> Result<ReportResult, IpcError> {
+) -> Result<ReportResult, WorkflowError> {
     reports::unlock(&client, &host, &sessions, &request.credential, request.days).await
 }
 
@@ -32,7 +32,7 @@ pub(crate) async fn read_reports(
     client: State<'_, HostClient>,
     sessions: State<'_, OperatorSessions>,
     days: u8,
-) -> Result<ReportResult, IpcError> {
+) -> Result<ReportResult, WorkflowError> {
     reports::execute(&client, &host, &sessions, days, ReportOperation::Read).await
 }
 
@@ -43,7 +43,7 @@ pub(crate) async fn save_report_preferences(
     client: State<'_, HostClient>,
     sessions: State<'_, OperatorSessions>,
     request: ReportPreferenceUpdate,
-) -> Result<ReportResult, IpcError> {
+) -> Result<ReportResult, WorkflowError> {
     reports::execute(
         &client,
         &host,
@@ -62,7 +62,7 @@ pub(crate) async fn clear_report_history(
     sessions: State<'_, OperatorSessions>,
     days: u8,
     confirmation: ReportHistoryConfirmation,
-) -> Result<ReportResult, IpcError> {
+) -> Result<ReportResult, WorkflowError> {
     reports::execute(
         &client,
         &host,

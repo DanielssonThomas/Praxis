@@ -1,5 +1,5 @@
-use crate::models::ipc_error::{IpcError, IpcErrorCode};
 use crate::models::settings::PortableSettings;
+use crate::models::workflow_error::{WorkflowError, WorkflowErrorCode};
 use crate::services::host_http::{HostClient, read_json, transport_error};
 use crate::state::host::ManagedHost;
 use reqwest::{Method, StatusCode};
@@ -12,7 +12,7 @@ const RESPONSE_LIMIT: usize = 16 * 1024;
 pub(crate) async fn read(
     client: &HostClient,
     host: &ManagedHost,
-) -> Result<PortableSettings, IpcError> {
+) -> Result<PortableSettings, WorkflowError> {
     request(client, host, None).await
 }
 
@@ -20,7 +20,7 @@ pub(crate) async fn save(
     client: &HostClient,
     host: &ManagedHost,
     settings: PortableSettings,
-) -> Result<PortableSettings, IpcError> {
+) -> Result<PortableSettings, WorkflowError> {
     request(client, host, Some(settings)).await
 }
 
@@ -28,7 +28,7 @@ async fn request(
     client: &HostClient,
     host: &ManagedHost,
     settings: Option<PortableSettings>,
-) -> Result<PortableSettings, IpcError> {
+) -> Result<PortableSettings, WorkflowError> {
     let method = if settings.is_some() {
         Method::PUT
     } else {
@@ -43,13 +43,13 @@ async fn request(
     };
     let response = builder.send().await.map_err(transport_error)?;
     match response.status() {
-        StatusCode::OK => read_json(response, RESPONSE_LIMIT).await,
-        StatusCode::BAD_REQUEST => Err(IpcError::new(
-            IpcErrorCode::InvalidInput,
+        StatusCode::OK => Ok(read_json(response, RESPONSE_LIMIT).await?),
+        StatusCode::BAD_REQUEST => Err(WorkflowError::new(
+            WorkflowErrorCode::InvalidInput,
             "Check the portable settings values. The previous settings were kept.",
         )),
-        _ => Err(IpcError::new(
-            IpcErrorCode::FeatureUnavailable,
+        _ => Err(WorkflowError::new(
+            WorkflowErrorCode::Unavailable,
             "The local settings are unavailable. Check the settings file and its permissions.",
         )),
     }
