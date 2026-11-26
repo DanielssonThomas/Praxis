@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -77,4 +77,25 @@ test("a reopened native worker journal retains one exact bounded result and usag
   await journal.save(settled);
   assert.deepEqual(await reopened.list(), [settled]);
   assert.deepEqual(visibleCodexObservation(settled, now + 10_001), settled.observation);
+});
+
+test("authority files stay outside the source and worker roots through both direct paths and symlinks", async (t) => {
+  const { root } = await fixture(t);
+  const { requireExternalCodexControls } = await module("-config");
+  const source = join(root, "checkout");
+  const workers = join(root, "workers");
+  await Promise.all([mkdir(source), mkdir(workers)]);
+  const outside = join(root, "operator.json");
+  const sourceAuthority = join(source, "authority.json");
+  const workerDatabase = join(workers, "operational.sqlite");
+  await Promise.all([outside, sourceAuthority, workerDatabase].map((path) => writeFile(path, "fixture\n")));
+  await requireExternalCodexControls([source, workers], [outside]);
+  await assert.rejects(requireExternalCodexControls([source, workers], [sourceAuthority]), /outside/);
+  await assert.rejects(requireExternalCodexControls([source, workers], [workerDatabase]), /outside/);
+  if (process.platform === "win32") return;
+  const alias = join(root, "authority-alias.json");
+  const trackedAlias = join(source, "authority-alias.json");
+  await Promise.all([symlink(sourceAuthority, alias), symlink(outside, trackedAlias)]);
+  await assert.rejects(requireExternalCodexControls([source, workers], [alias]), /outside/);
+  await assert.rejects(requireExternalCodexControls([source, workers], [trackedAlias]), /outside/);
 });
