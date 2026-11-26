@@ -9,11 +9,14 @@ import { isAbsolute, join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import { OperationalStore } from "@praxis/state";
-import { enter, startDesktop, tab } from "./desktop-fixture.mjs";
+import { enter, eventually, startDesktop, tab } from "./desktop-fixture.mjs";
 
 const execute = promisify(execFile);
 const title = "Native Hermes board desktop fixture";
 const boardStatus = "#kanban-status";
+const details = "#kanban-task-details[open]";
+const detailStatus = "#kanban-task-status";
+const issue = details + ' [aria-label="Open fixture/project#42 in the browser"]';
 
 async function command(desktop, value) {
   const control = await desktop.element('[aria-label="Command"]');
@@ -27,13 +30,13 @@ async function unlockBoard(desktop, token) {
   await input.type(token + enter);
 }
 
-async function linkByKeyboard(desktop, task, issue) {
-  const input = await desktop.element(task + ' input[placeholder="owner/repo#42"]');
+async function linkByKeyboard(desktop, value) {
+  const input = await desktop.element(details + ' input[placeholder="owner/repo#42"]');
   await input.click();
   await input.clear();
-  await input.type(issue + tab);
+  await input.type(value + tab);
   assert.equal(await desktop.execute("return document.activeElement.textContent.trim()"), "Link issue");
-  await (await desktop.element(task + ' button[type="submit"]')).type(enter);
+  await (await desktop.element(details + ' button[type="submit"]')).type(enter);
 }
 
 test("the packaged Kanban follows live native states and saves one scoped GitHub issue", { timeout: 120_000 }, async (t) => {
@@ -96,6 +99,8 @@ test("the packaged Kanban follows live native states and saves one scoped GitHub
   const { id, status } = JSON.parse((await cli("create", title, "--assignee", "default", "--json")).stdout);
   assert.equal(status, "ready");
   assert.match(id, /^t_[a-f0-9]+$/);
+  const otherTitle = "Second desktop fixture task";
+  const { id: otherId } = JSON.parse((await cli("create", otherTitle, "--assignee", "default", "--json")).stdout);
 
   const desktopEnv = {
     ...env,
@@ -129,39 +134,77 @@ test("the packaged Kanban follows live native states and saves one scoped GitHub
   await unlockBoard(desktop, operator);
 
   const card = (nativeStatus) => '[data-status="' + nativeStatus + '"] [data-native-id="' + id + '"]';
-  const issue = (nativeStatus) => card(nativeStatus) + ' [aria-label="Open fixture/project#42 in the browser"]';
-  await desktop.waitForText(card("ready") + " h3", title);
+  const cardTrigger = (nativeStatus) => card(nativeStatus) + ' button[aria-haspopup="dialog"]';
+  const waitForDisplayedTitle = (selector, expected) => eventually(() => desktop.execute(
+    "const title = document.querySelector(arguments[0]); return !!title?.getClientRects().length && title.textContent.trim() === arguments[1]",
+    selector, expected,
+  ), "The native task title did not render.");
+  const showDetails = async (selector, expected = title) => {
+    await (await desktop.element(selector)).type(enter);
+    await waitForDisplayedTitle(details + " h2", expected);
+  };
+  const closeDetails = async (focusTarget) => {
+    await (await desktop.element(details + ' [aria-label="Close task details"]')).type(enter);
+    await eventually(() => desktop.execute("return !document.querySelector(arguments[0])", details), "Task details did not close.");
+    await eventually(() => desktop.execute("return document.activeElement.matches(arguments[0])", focusTarget),
+      "Closing details did not restore focus to the selected native task.");
+  };
+  await waitForDisplayedTitle(cardTrigger("ready"), title);
   assert.equal(await desktop.execute("return window.innerWidth"), 390);
   assert.equal(await desktop.execute("return getComputedStyle(document.querySelector('praxis-kanban-board .board')).display"),
     "grid", "the packaged WebView must apply Angular component styles");
   assert.equal(await desktop.execute("return getComputedStyle(document.querySelector('praxis-shell')).display"),
     "grid", "the packaged shell must retain its grid layout");
   assert.equal(await desktop.execute("return document.querySelector('main').scrollWidth <= document.querySelector('main').clientWidth"), true);
-  await linkByKeyboard(desktop, card("ready"), "invalid-input");
-  await desktop.waitForText(boardStatus, /owner\/repo#42/i);
+  assert.equal(await desktop.execute("return document.querySelectorAll('[data-status=ready] .count')[0].textContent.trim()"), "2");
+  await showDetails(cardTrigger("ready"));
+  await desktop.waitForText(details + " .state", /ready/i);
+  assert.equal(await desktop.execute("return document.activeElement.getAttribute('aria-label')"), "Close task details");
+  await linkByKeyboard(desktop, "invalid-input");
+  await desktop.waitForText(detailStatus, /owner\/repo#42/i);
   assert.deepEqual(providerCalls, []);
-  await linkByKeyboard(desktop, card("ready"), "fixture/project#43");
-  await desktop.waitForText(boardStatus, /not authorize/i);
-  await linkByKeyboard(desktop, card("ready"), "fixture/project#42");
-  await desktop.waitForText(issue("ready"), "fixture/project#42");
-  await linkByKeyboard(desktop, card("ready"), "fixture/project#42");
-  await desktop.waitForText(boardStatus, "GitHub issue linked.");
+  await linkByKeyboard(desktop, "fixture/project#42");
+  await desktop.waitForText(issue, "fixture/project#42");
+  await linkByKeyboard(desktop, "invalid-input");
+  await desktop.waitForText(detailStatus, /owner\/repo#42/i);
+  await desktop.waitForText(issue, "fixture/project#42");
+  await linkByKeyboard(desktop, "fixture/project#43");
+  await desktop.waitForText(detailStatus, /not authorize/i);
+  await desktop.waitForText(issue, "fixture/project#42");
+  await linkByKeyboard(desktop, "fixture/project#42");
+  await desktop.waitForText(detailStatus, "GitHub issue linked.");
 
-  await (await desktop.element(issue("ready"))).type(enter);
-  await desktop.waitForText(boardStatus, "GitHub issue opened in the browser.");
+  await (await desktop.element(issue)).type(enter);
+  await desktop.waitForText(detailStatus, "GitHub issue opened in the browser.");
   assert.equal((await readFile(join(directory, "opened-issue.txt"), "utf8")).trim(),
     "https://github.com/fixture/project/issues/42");
   assert.equal((await desktop.handles()).length, 1);
 
   await cli("block", id, "Isolated fixture transition");
-  await (await desktop.element("#kanban-refresh")).click();
-  await desktop.waitForText(issue("blocked"), "fixture/project#42");
+  await (await desktop.element(details + " button.refresh")).type(enter);
+  await desktop.waitForText(details + " .state", /blocked/i);
+  await desktop.waitForText(issue, "fixture/project#42");
+  const evidence = process.env.PRAXIS_DESKTOP_EVIDENCE_DIR;
+  if (evidence) {
+    await mkdir(evidence, { recursive: true });
+    await desktop.screenshot(join(evidence, "kanban-task-detail-390x700.png"));
+  }
+  await closeDetails(cardTrigger("blocked"));
+  assert.equal(await desktop.execute("return document.querySelector('.board').scrollWidth > document.querySelector('.board').clientWidth"),
+    true, "the narrow board should contain its own horizontal scroll");
+  assert.equal(await desktop.execute("return document.querySelector('main').scrollWidth <= document.querySelector('main').clientWidth"), true);
+  if (evidence) await desktop.screenshot(join(evidence, "kanban-390x700.png"));
+
   await cli("unblock", id);
   await (await desktop.element("#kanban-refresh")).click();
-  await desktop.waitForText(issue("ready"), "fixture/project#42");
+  await desktop.waitForText(card("ready") + " .issue", "fixture/project#42");
+  const other = '[data-native-id="' + otherId + '"] button[aria-haspopup="dialog"]';
+  await showDetails(other, otherTitle);
+  assert.equal(await desktop.execute("return !document.querySelector(arguments[0])", issue), true);
+  await closeDetails(other);
   assert.deepEqual(providerCalls, [
-    { path: "/repos/fixture/project/issues/43", method: "GET", authorized: true },
     { path: "/repos/fixture/project/issues/42", method: "GET", authorized: true },
+    { path: "/repos/fixture/project/issues/43", method: "GET", authorized: true },
   ]);
   const store = new OperationalStore(database);
   try {
@@ -171,25 +214,22 @@ test("the packaged Kanban follows live native states and saves one scoped GitHub
   } finally {
     store.close();
   }
-  const evidence = process.env.PRAXIS_DESKTOP_EVIDENCE_DIR;
-  if (evidence) {
-    await mkdir(evidence, { recursive: true });
-    await desktop.screenshot(join(evidence, "kanban-390x700.png"));
-  }
-
   await desktop.close();
   desktop = await startDesktop(binary, { environment: boardEnv });
   await command(desktop, "/kanban");
   await unlockBoard(desktop, operator);
   await desktop.waitForText("#kanban-provider", /GitHub issue linking is unavailable/);
-  await desktop.waitForText(issue("ready"), "fixture/project#42");
-  assert.equal(await desktop.execute("return document.querySelectorAll('[data-native-id] form').length"), 0);
+  await showDetails(cardTrigger("ready"));
+  await desktop.waitForText(issue, "fixture/project#42");
+  await desktop.waitForText(details + " section p", /GitHub issue linking is unavailable/);
+  assert.equal(await desktop.execute("return !document.querySelector(arguments[0])", details + " form"), true);
   await desktop.close();
   desktop = await startDesktop(binary, { environment: desktopEnv });
   await command(desktop, "/kanban");
   await desktop.waitForText(boardStatus, /Configure the local Hermes board/);
   const webkit = execFileSync("pkg-config", ["--modversion", "webkit2gtk-4.1"], { encoding: "utf8" }).trim();
   t.diagnostic("Linux x64 Wry " + wry + " / WebKitGTK " + webkit
-    + ". Keyboard issue linking, provider and operator denial, exact durable retry, native board transitions,"
+    + ". Keyboard task details and issue linking, focus after a native lane change, contained board scrolling,"
+    + " provider and operator denial, exact durable retry, native board transitions,"
     + " verified opener isolation, and missing setup/provider states passed.");
 });

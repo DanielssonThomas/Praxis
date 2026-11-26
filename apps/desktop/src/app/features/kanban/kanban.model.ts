@@ -7,6 +7,19 @@ export interface KanbanColumn {
   tasks: KanbanTask[];
 }
 
+export interface KanbanTaskFeedback {
+  readonly nativeId: string;
+  readonly message: string;
+}
+
+export function taskTriggerId(nativeId: string): string {
+  return `kanban-task-${nativeId}`;
+}
+
+export function nativeStatusLabel(status: string): string {
+  return status.replaceAll("_", " ");
+}
+
 export function groupByNativeStatus(tasks: KanbanTask[]): KanbanColumn[] {
   const byStatus = new Map<string, KanbanTask[]>();
   for (const task of tasks) {
