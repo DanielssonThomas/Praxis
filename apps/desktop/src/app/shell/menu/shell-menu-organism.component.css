@@ -32,6 +32,29 @@ header {
   box-shadow: 0 -0.32rem currentColor, 0 0.32rem currentColor;
 }
 
+.attention-count {
+  display: inline-grid;
+  min-inline-size: 1.15rem;
+  min-block-size: 1.15rem;
+  margin-inline-start: 0.3rem;
+  place-items: center;
+  padding-inline: 0.25rem;
+  border-radius: 1rem;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-notice {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 nav {
   grid-area: navigation;
   overflow: auto;

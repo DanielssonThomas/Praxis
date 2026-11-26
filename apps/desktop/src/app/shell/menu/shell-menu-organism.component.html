@@ -12,8 +12,19 @@
     (keydown.arrowdown)="focusNavigation($event)"
   ><span class="menu-icon" aria-hidden="true"></span></button>
   @if (activityAvailable()) {
-    <button praxisButton type="button" id="activity-toggle" aria-controls="desktop-activity"
-      [attr.aria-expanded]="activityOpened()" (click)="activityToggled.emit()">Activity</button>
+    <button praxisButton #activityToggle type="button" id="activity-toggle" aria-label="Activity"
+      aria-controls="desktop-activity" [attr.aria-expanded]="activityOpened()"
+      [attr.aria-describedby]="activityAttentionCount() ? 'activity-notice' : null" (click)="activityToggled.emit()">
+      Activity
+      @if (activityAttentionCount(); as count) {
+        <span class="attention-count" aria-hidden="true">{{ count }}</span>
+      }
+    </button>
+    <span id="activity-notice" class="activity-notice" role="status">
+      @if (activityAttentionCount(); as count) {
+        {{ count }} pending {{ count === 1 ? "approval" : "approvals" }}
+      }
+    </span>
   }
 </header>
 <nav id="main-navigation" aria-label="Main navigation" [hidden]="!open()">

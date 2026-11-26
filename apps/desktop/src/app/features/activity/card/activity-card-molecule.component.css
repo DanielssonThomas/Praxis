@@ -1,15 +1,39 @@
 article {
   display: grid;
-  justify-items: start;
-  gap: 0.3rem;
-  padding: 0.6rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.65rem;
+  padding: 0.7rem;
   border: 1px solid var(--border);
-  border-radius: 0.55rem;
+  border-radius: 0.65rem;
+  background: var(--panel-raised);
   overflow-wrap: anywhere;
 }
 
-article[data-state="attention"] { border-color: var(--accent); }
+article[data-state="attention"] { border-color: var(--activity-attention); }
+
+.summary { display: grid; gap: 0.16rem; min-inline-size: 0; }
 h3, p { margin: 0; }
-h3 { font-size: 0.98rem; }
-p { color: var(--muted); font-size: 0.9rem; }
-.actions { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+h3 { font-size: 0.93rem; }
+p { color: var(--muted); font-size: 0.82rem; }
+.target { font-family: monospace; }
+
+.phase {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.phase span {
+  inline-size: 0.4rem;
+  block-size: 0.4rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+article[data-state="attention"] .phase { color: var(--activity-attention); }
+
+button { align-self: center; font-size: 0.83rem; }
