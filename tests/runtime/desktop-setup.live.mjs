@@ -72,19 +72,25 @@ test("packaged Setup recovers a missing sidecar and hands off authenticated Mana
   if (evidence) await desktop.screenshot(join(evidence, "setup-native-missing-host.png"));
 
   await rename(withheld, sidecar);
-  await retry.type(enter);
-  await desktop.waitForText(hostStatus, /Local Praxis host ready/);
+  await retry.click();
+  try {
+    await desktop.waitForText(hostStatus, /Local Praxis host ready/);
+  } catch (error) {
+    t.diagnostic("Observed host status after Retry was " + await (await desktop.element(hostStatus)).text());
+    if (evidence) await desktop.screenshot(join(evidence, "setup-native-retry-failed.png"));
+    throw error;
+  }
   await desktop.waitForText(hostStatus + " span", "Node.js " + process.versions.node);
   if (evidence) await desktop.screenshot(join(evidence, "setup-native-ready-host.png"));
 
-  await (await desktop.element("praxis-setup footer button.primary")).type(enter);
+  await (await desktop.element("praxis-setup footer button.primary")).click();
   await desktop.waitForText(guideHeading, "Connect a named Hermes profile");
   await desktop.waitForText('praxis-setup a[href="#/settings"]', "Open Settings");
-  await (await desktop.element("praxis-setup footer button.primary")).type(enter);
+  await (await desktop.element("praxis-setup footer button.primary")).click();
   await desktop.waitForText(guideHeading, "Open Manager with your operator token");
   assert.equal(await desktop.execute("return document.querySelectorAll('praxis-setup input').length"), 0);
   if (evidence) await desktop.screenshot(join(evidence, "setup-native-operator-access.png"));
-  await (await desktop.element('praxis-setup a[href="#/manager"]')).type(enter);
+  await (await desktop.element('praxis-setup a[href="#/manager"]')).click();
   await desktop.waitForText("h1", "Manager");
   await (await desktop.element(operatorInput)).type("invalid-fixture-operator-token" + enter);
   await desktop.waitForText("praxis-manager [role=status]", /operator token was refused/i);
