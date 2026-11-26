@@ -25,7 +25,22 @@ PRAXIS_AXIOM_ROOT=/absolute/path/to/pinned-built-axiom \
 npm run test:codex:live
 ```
 
-An operator can additionally opt into one real account task. First prepare a dedicated Codex home with an authorized native file-based login and that account's entitled model. The probe stages the native authentication state and optional native configuration in one temporary profile, checks an actual scoped file result, and prints only host and outcome metadata. Keep the configured proxy environment in place.
+### Opt-in account verification
+
+Use a dedicated, private Codex home for an account you are authorized to use. Set file-based credential storage in that home's `config.toml`.
+
+```toml
+cli_auth_credentials_store = "file"
+```
+
+Complete the pinned CLI's native device authorization in the dedicated home. The native CLI saves its login in that home's `auth.json`.
+
+```sh
+CODEX_HOME=/absolute/path/to/authorized-account-home \
+  /absolute/path/to/codex login --device-auth
+```
+
+From the built Praxis checkout, select the same home and a model the account is entitled to use. Keep the configured proxy and certificate environment in place. The probe checks for the login file before starting the worker, stages the native login and optional configuration in a temporary profile, verifies the scoped file result, and records host and outcome metadata.
 
 ```sh
 PRAXIS_RUN_CODEX_ACCOUNT=1 \

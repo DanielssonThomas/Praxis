@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { copyFile, chmod, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, chmod, copyFile, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { test } from "node:test";
@@ -10,8 +11,12 @@ test("an explicitly authorized Codex account completes one real scoped worker as
   assert.equal(process.env.PRAXIS_RUN_CODEX_ACCOUNT, "1", "Explicit real-account opt-in is required.");
   const { PRAXIS_CODEX_BIN: program, PRAXIS_AXIOM_ROOT: axiomRoot, PRAXIS_CODEX_ACCOUNT_HOME: accountHome,
     PRAXIS_CODEX_MODEL: model } = process.env;
-  assert.ok(program && axiomRoot && accountHome && isAbsolute(accountHome) && model,
+  assert.ok(program && isAbsolute(program) && axiomRoot && isAbsolute(axiomRoot) && accountHome && isAbsolute(accountHome) && model,
     "Supply an absolute Codex binary, Axiom checkout and account home, plus the account's entitled model.");
+  const auth = join(accountHome, "auth.json");
+  const login = await access(auth, constants.R_OK).then(() => stat(auth)).catch(() => undefined);
+  assert.ok(login?.isFile() && login.size > 0,
+    "Complete file-based Codex login in the selected dedicated home so a readable auth.json exists.");
   const root = await mkdtemp(join(tmpdir(), "praxis-codex-account-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const marker = "native-fixture-" + randomUUID();
@@ -20,11 +25,15 @@ test("an explicitly authorized Codex account completes one real scoped worker as
   const executor = new CodexExecutor({
     program, axiomRoot, root, model,
     async prepareProfile({ codexHome }) {
-      const auth = join(codexHome, "auth.json");
-      await copyFile(join(accountHome, "auth.json"), auth);
-      await chmod(auth, 0o600);
+      const stagedAuth = join(codexHome, "auth.json");
+      try {
+        await copyFile(auth, stagedAuth);
+        await chmod(stagedAuth, 0o600);
+      } catch {
+        throw new Error("The dedicated Codex login could not be staged.");
+      }
       await copyFile(join(accountHome, "config.toml"), join(codexHome, "config.toml")).catch((error) => {
-        if (error.code !== "ENOENT") throw error;
+        if (error.code !== "ENOENT") throw new Error("The dedicated Codex configuration could not be staged.");
       });
     },
     prepareWorkspace: ({ workspace }) => writeFile(join(workspace, "fixture.txt"), marker + "\n"),
