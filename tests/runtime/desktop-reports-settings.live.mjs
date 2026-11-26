@@ -65,7 +65,7 @@ async function fixture(t) {
 }
 
 async function navigate(app, route) {
-  const command = await app.element('input[name="command"]');
+  const command = await app.element('[aria-label="Command"]');
   await command.clear();
   await command.type(`/${route.toLowerCase()}${enter}`);
   await app.waitForText("h1", route);

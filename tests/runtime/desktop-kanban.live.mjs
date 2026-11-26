@@ -16,7 +16,7 @@ const title = "Native Hermes board desktop fixture";
 const boardStatus = "#kanban-status";
 
 async function command(desktop, value) {
-  const control = await desktop.element('input[aria-label="Command"]');
+  const control = await desktop.element('[aria-label="Command"]');
   await control.click();
   await control.clear();
   await control.type(value + enter);

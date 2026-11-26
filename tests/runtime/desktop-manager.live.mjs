@@ -122,7 +122,7 @@ test("packaged Manager reconnects real named Hermes output and Overview restores
     assert.equal(await desktop.execute("return getComputedStyle(document.querySelector('praxis-shell')).display"), "grid");
   };
   const command = async (value) => {
-    const field = await desktop.element('input[aria-label="Command"]');
+    const field = await desktop.element('[aria-label="Command"]');
     await field.click();
     await field.clear();
     await field.type(value + enter);
@@ -167,27 +167,44 @@ test("packaged Manager reconnects real named Hermes output and Overview restores
   if (evidence) await desktop.screenshot(join(evidence, "overview-live-workers.png"));
 
   await command("/m");
-  await desktop.waitForText("h1", "Manager");
+  await desktop.waitForText("#manager-lock", "Lock manager");
   await (await desktop.element("#manager-lock")).click();
   await unlock("Manager");
   await (await desktop.element("#manager-reconnect")).click();
   await eventually(() => containing('[role="log"] li', reply), "Reconnect lost output.");
   releaseManager();
-  await eventually(() => visible('[aria-label="Related work"]'), "Scoped cards did not render.");
+  const related = '[aria-label="Related work"]';
+  const selectors = `${related} button[aria-expanded]`;
+  const panel = `${related} article`;
+  await eventually(() => visible(panel), "Scoped cards did not automatically open.");
   assert.equal(managerCalls, 1, "The same turn was not submitted twice.");
-  assert.equal(await containing('[aria-label="Related work"]', foreign.title), false);
-  assert.equal(await desktop.execute('return document.querySelectorAll("article[aria-label=\\\"Task unavailable\\\"]").length'), 2);
-  const card = `article[aria-label="${workers[0].task.title}"]`;
-  await (await desktop.element(`${card} summary`)).click();
-  await eventually(() => visible(`${card} details[open] p`), "Card details did not expand.");
+  assert.equal(await containing(related, foreign.title), false);
+  const labels = await desktop.execute(
+    "return Array.from(document.querySelectorAll(arguments[0]), button => button.textContent.trim())", selectors,
+  );
+  assert.equal(labels[0], workers[0].task.title);
+  assert.match(labels[1], /Worker session/);
+  assert.deepEqual(labels.slice(2), ["Task unavailable", "Task unavailable"]);
+  assert.equal(await containing(panel, workers[0].task.id), true);
   if (evidence) await desktop.screenshot(join(evidence, "manager-scoped-cards.png"));
-  await (await desktop.element(`${card} button`)).click();
-  assert.equal(await visible(card), false);
+
+  await (await desktop.element(`${selectors}:nth-child(2)`)).click();
+  await eventually(() => containing(panel, workers[0].session.id), "Worker session details did not open.");
+  await (await desktop.element(`${selectors}:nth-child(3)`)).click();
+  await eventually(() => containing(panel, "Task unavailable"), "The denied task did not show its unavailable state.");
+  assert.equal(await containing(panel, foreign.id), false);
+  if (evidence) await desktop.screenshot(join(evidence, "manager-unavailable-card.png"));
+  await (await desktop.element(`${selectors}:first-child`)).click();
+  await (await desktop.element(`${panel} button.dismiss`)).click();
+  assert.equal(await visible(panel), false);
+  assert.equal(await containing(selectors, workers[0].task.title), false);
 
   await updateSettings(settings, (value) => ({ ...value, display: { ...value.display, autoPresent: false } }));
   await command(secondPrompt);
   await eventually(() => containing('[role="log"] li', "Presentation preference observed."), "The next turn did not render.");
-  assert.equal(await desktop.execute('return Array.from(document.querySelectorAll("[role=log] li")).at(-1).querySelectorAll("article").length'), 0);
+  assert.equal(await desktop.execute(
+    'return Array.from(document.querySelectorAll("[role=log] li")).at(-1).querySelectorAll(arguments[0]).length', related,
+  ), 0);
 
   await desktop.close();
   desktop = undefined;

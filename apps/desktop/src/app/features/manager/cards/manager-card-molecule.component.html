@@ -1,17 +1,23 @@
-<article [attr.aria-label]="title()">
-  <h3>{{ title() }}</h3>
-  @if (status()) { <p>{{ status() }}</p> }
-  @let item = resource();
-  @if (item.kind !== "unavailable") {
-    <details>
-      <summary>Details</summary>
-      @if (item.kind === "task") {
-        <p>{{ item.task.id }}</p>
-      } @else {
-        <p>{{ item.session.id }}</p>
-        <p>Task {{ item.session.taskId }}</p>
-      }
-    </details>
-  }
-  <button praxisButton type="button" (click)="dismissed.emit()">Dismiss</button>
+<article [attr.aria-labelledby]="titleId()">
+  <header>
+    <h3 [id]="titleId()">{{ card().title }}</h3>
+    <button praxisButton type="button" class="close" aria-label="Close details" (click)="closed.emit()">×</button>
+  </header>
+  <div class="body">
+    @let item = card().value;
+    @if (item.kind === "unavailable") {
+      <p>The Manager connection could not resolve this reference.</p>
+    } @else {
+      <dl>
+        @if (item.kind === "task") {
+          <dt>Task</dt><dd>{{ item.task.id }}</dd>
+        } @else {
+          <dt>Session</dt><dd>{{ item.session.id }}</dd>
+          <dt>Task</dt><dd>{{ item.session.taskId }}</dd>
+          <dt>Status</dt><dd>{{ status() }}</dd>
+        }
+      </dl>
+    }
+    <button praxisButton type="button" class="dismiss" (click)="dismissed.emit()">Dismiss</button>
+  </div>
 </article>
