@@ -38,6 +38,7 @@ export interface CodexExecutorOptions {
   model: string;
   prepareWorkspace?: (scope: Staging) => Promise<void>;
   prepareProfile?: (scope: Staging) => Promise<void>;
+  authorizeLaunch?: (scope: Staging) => Promise<void>;
 }
 
 type ErrorCode = "invalid_input" | "unsupported" | "assignment_mismatch" | "not_found" | "unavailable";
@@ -149,6 +150,8 @@ export class CodexExecutor implements WorkerExecutor {
       signal.throwIfAborted();
       const profile = { program: this.#options.program, workspace, home: codexHome, userHome, environment: environment() };
       await axiom.prepare(profile, brief, privatePaths[2], signal);
+      signal.throwIfAborted();
+      await this.#options.authorizeLaunch?.(staging);
       signal.throwIfAborted();
       const assignment = workerAssignmentSchema.parse({
         schemaVersion: contractVersion, taskId: task.id, sessionId: session.id, runtime: "codex", runId: `worker_${randomUUID()}`,
