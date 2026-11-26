@@ -14,11 +14,11 @@ import { createPraxisMcpServer } from "@praxis/mcp";
 import { defaultSettings } from "@praxis/settings";
 import { OperationalStore } from "@praxis/state";
 import { chromium } from "playwright";
-import { providerFixture, startShell, stopProcess, until } from "./hermes-fixture.mjs";
+import { containsAxiomPolicy, providerFixture, startShell, stopProcess, until } from "./hermes-fixture.mjs";
 
 const execute = promisify(execFile);
 const finalReply = "The named manager read the fixture task.";
-const releases = { axiom: "96014e73ca14111be83c448898e41559f0f87f88", hermes: "caafe5389ae585ef77387a962aee05b1bcf17029" };
+const releases = { axiom: "ef35e6f5fb881db878a9547f124f8c28a08b414e", hermes: "caafe5389ae585ef77387a962aee05b1bcf17029" };
 const skills = ["context", "delegate", "design", "diagnose", "knowledge", "verify"];
 const schemas = ["inspect_task", "inspect_worker", "report_worker", "request_action"].map((name) => "mcp__praxis__" + name);
 const digest = (value) => createHash("sha256").update(value).digest("hex");
@@ -32,12 +32,6 @@ function toolReply(name, args) {
 
 function reply(content) {
   return { message: { role: "assistant", content } };
-}
-
-function observedPolicy(prompt) {
-  return [...prompt.matchAll(/## Plugin Context: axiom\.policy-\d{3}\n<!-- hermes-plugin-section-chars:(\d+) -->\n\n/g)]
-    .map(({ 0: header, 1: length, index }) =>
-      Array.from(prompt.slice(index + header.length)).slice(0, Number(length)).join("")).join("\n\n");
 }
 
 async function start(server) {
@@ -415,7 +409,7 @@ test("the installed Linux manager loads its policy and responds while an indepen
   assert.equal(receipt.status, 200);
   assert.equal(inspectHermesActivation(target, (await receipt.json()).session_id).loaded.status, "passed");
   const core = (await readFile(join(axiom, "core", "AXIOMS.md"), "utf8")).trim();
-  assert.ok(prompts.some((prompt) => observedPolicy(prompt) === `Axiom policy digest ${setup.policy.digest}\n\n${core}`));
+  assert.ok(prompts.some((prompt) => containsAxiomPolicy(prompt, setup.policy.digest, core)));
   assert.ok(prompts.some((prompt) => skills.every((name) => prompt.includes("axiom:" + name))));
   assert.ok(prompts.some((prompt) => prompt.includes("Installed manager owner customization.")));
   const missing = await readTurn(await requestTurn("missing", unknownPrompt));

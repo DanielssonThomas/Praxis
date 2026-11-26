@@ -41,14 +41,15 @@
       <a routerLink="/settings" class="action">Open Settings</a>
       <details>
         <summary>Install and connect the default manager</summary>
-        <p>Build Praxis and the pinned Axiom revision <code>96014e73ca14111be83c448898e41559f0f87f88</code>
-          as described in <code>docs/hermes-manager.md</code>. Run this command from the Praxis checkout.</p>
-        <pre><code>node scripts/install-hermes-manager.mjs \
+        <p>Download and verify the <a href="https://github.com/DanielssonThomas/Axiom/releases/tag/v1.0.0"
+          target="_blank" rel="noreferrer">Axiom v1.0.0</a> Linux x64 release. Extract
+          <code>axiom-v1.0.0-runtime-linux-x64.tar.gz</code>, then run the bundled installer.</p>
+        <pre><code>/usr/lib/Praxis/host/bin/node /usr/lib/Praxis/host/setup/install-hermes-manager.mjs \
   --hermes-bin /path/to/hermes \
   --hermes-home /path/to/dedicated-hermes \
-  --axiom-root /path/to/built-axiom</code></pre>
-        <p>Configure the model and scoped Praxis MCP access in the named profile using the same guide.
-          Start the Hermes gateway from the dedicated root.</p>
+  --axiom-root /path/to/axiom-runtime</code></pre>
+        <p>Configure the model and scoped Praxis MCP access in the named profile.
+          Start its gateway with <code>/usr/lib/Praxis/host/bin</code> on PATH.</p>
         <p>In the desktop launch environment, set <code>PRAXIS_MCP_CONFIG_FILE</code> to the same authority file
           used by Praxis MCP. Set <code>PRAXIS_HERMES_ORIGIN</code> to the local gateway URL for the named profile
           (for example <code>http://127.0.0.1:8642/p/praxis-manager</code>).

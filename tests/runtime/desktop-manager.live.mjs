@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,7 +6,7 @@ import { isAbsolute, join } from "node:path";
 import { test } from "node:test";
 import { defaultSettings, updateSettings } from "@praxis/settings";
 import { OperationalStore } from "@praxis/state";
-import { enter, eventually, startDesktop } from "./desktop-fixture.mjs";
+import { desktopPackageRoot, enter, eventually, startDesktop } from "./desktop-fixture.mjs";
 import { until } from "./hermes-fixture.mjs";
 import { startNamedHermesFixture } from "./named-hermes-fixture.mjs";
 
@@ -37,11 +36,10 @@ test("packaged Manager reconnects real named Hermes output and Overview restores
     releaseManager();
     await desktop?.close();
     store.close();
-    await rm(directory, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true, maxRetries: 6, retryDelay: 100 });
   });
 
-  const installed = join(directory, "installed");
-  execFileSync("dpkg-deb", ["--extract", packagePath, installed]);
+  const installed = desktopPackageRoot(packagePath, directory);
   const binary = join(installed, "usr/bin/praxis-desktop");
   const task = (key, title) => ({ schemaVersion: 1, id: `task_${key}`, title });
   const workers = [

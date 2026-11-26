@@ -100,11 +100,11 @@ for (const viewport of [wide, narrow]) {
     assert.equal(await steps.getByRole("button", { name: "Hermes profile" }).getAttribute("aria-current"), "step");
     assert.match(await page.getByRole("link", { name: "Open Settings" }).getAttribute("href"), /#\/settings$/);
     await page.getByText("Install and connect the default manager", { exact: true }).press("Enter");
-    await page.getByText(/node scripts\/install-hermes-manager\.mjs/).waitFor();
+    await page.getByText(/\/usr\/lib\/Praxis\/host\/setup\/install-hermes-manager\.mjs/).waitFor();
     await page.getByText("PRAXIS_HERMES_ORIGIN", { exact: true }).waitFor();
     assert.equal(await page.getByText("PRAXIS_MCP_CONFIG_FILE", { exact: true }).count(), 1,
       "the guide identifies the authority file required by the configured local host");
-    await page.getByText("96014e73ca14111be83c448898e41559f0f87f88", { exact: true }).waitFor();
+    assert.match(await page.getByRole("link", { name: "Axiom v1.0.0", exact: true }).getAttribute("href"), /Axiom\/releases\/tag\/v1\.0\.0$/);
     await assertLayout(page);
     await capture(page, `setup-profile-${viewport.width}`);
     await next.press("Enter");

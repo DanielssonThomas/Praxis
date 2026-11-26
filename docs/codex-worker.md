@@ -4,7 +4,7 @@ The `@praxis/codex-runtime` package runs one ordinary `codex exec --json` proces
 
 ## Local API
 
-Build Praxis and a clean checkout of Axiom at `96014e73ca14111be83c448898e41559f0f87f88`. The executor uses that checkout's built Codex adapter and canonical task brief validator. The first supported policy is Axiom core v1. A brief with a different policy identity or selected profiles is refused.
+Use the built Axiom v1.0.0 runtime at revision `ef35e6f5fb881db878a9547f124f8c28a08b414e`. The executor uses the runtime's Codex adapter and canonical task brief validator. The supported policy is Axiom core v1 with no selected profiles. [Verify and extract the Axiom runtime](desktop-release.md#install)
 
 Construct `new CodexExecutor({ program, axiomRoot, root, model, prepareWorkspace, prepareProfile })` from `@praxis/codex-runtime`. Use absolute local paths for the binary, Axiom checkout and output root. The host's trusted callbacks receive a newly created workspace and fresh Codex and user profile directories. Stage the task files with `prepareWorkspace` and any authorized native configuration with `prepareProfile`. The executor installs and observes Axiom in the fresh Codex profile before submitting the validated brief over stdin.
 

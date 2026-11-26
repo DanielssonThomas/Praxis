@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
+import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const desktopEnvironmentKeys = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'DISPLAY', 'XAUTHORITY',
@@ -48,6 +49,13 @@ async function request(origin, method, pathname, payload, timeout = 6_000) {
   const { value } = await response.json();
   if (!response.ok) throw new DriverError(value?.error ?? 'unknown error', method, pathname, response.status);
   return value;
+}
+
+export function desktopPackageRoot(deb, directory) {
+  if (process.env.PRAXIS_DESKTOP_USE_INSTALLED === '1') return '/';
+  const extracted = join(directory, 'installed');
+  execFileSync('dpkg-deb', ['--extract', deb, extracted], { timeout: 20_000 });
+  return extracted;
 }
 
 export async function startDesktop(binary, { environment = {}, args = [], startupTimeout = 25_000 } = {}) {

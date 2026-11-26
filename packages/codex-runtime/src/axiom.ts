@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 const execute = promisify(execFile);
-const axiomRevision = "96014e73ca14111be83c448898e41559f0f87f88";
+const axiomRevision = "ef35e6f5fb881db878a9547f124f8c28a08b414e";
 
 interface PolicyIdentity {
   version: string;

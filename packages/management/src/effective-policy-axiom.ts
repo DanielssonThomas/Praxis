@@ -4,7 +4,7 @@ import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
-export const axiomRevision = "96014e73ca14111be83c448898e41559f0f87f88";
+export const axiomRevision = "ef35e6f5fb881db878a9547f124f8c28a08b414e";
 
 // Describe only the interfaces Praxis consumes from the owner's built checkout.
 // The pinned Axiom packages own parsing, policy resolution and evidence assessment.
@@ -120,7 +120,7 @@ export async function loadPolicyAxiom(axiomRoot: string, evidenceRoot: string): 
   const root = await realpath(axiomRoot);
   const git = (args: string[]) => execute("git", ["-C", root, ...args], { timeout: 5_000 });
   if ((await git(["rev-parse", "HEAD"])).stdout.trim() !== axiomRevision || (await git(["status", "--porcelain"])).stdout) {
-    throw new Error("Use a clean build of the governing Axiom revision.");
+    throw new Error("Use the extracted Axiom v1 runtime from the qualified release.");
   }
   const load = <Key extends keyof AxiomModules>(name: Key): Promise<AxiomModules[Key]> =>
     import(pathToFileURL(join(root, "packages", name, "dist/index.js")).href);

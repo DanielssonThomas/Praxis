@@ -11,6 +11,12 @@ if (process.platform !== "linux" || process.arch !== "x64" || process.version !=
   throw new Error(`Package Praxis on Linux x64 with the pinned Node.js ${nodeVersion} distribution.`);
 }
 
+const args = process.argv.slice(2);
+if (args.length > 1 || (args.length === 1 && args[0] !== "--release")) {
+  throw new Error("Usage: npm run package:native --workspace @praxis/desktop -- [--release]");
+}
+const release = args[0] === "--release";
+
 const run = (command, args, cwd) => execFileSync(command, args, { cwd, stdio: "inherit" });
 const workspace = await mkdtemp(join(tmpdir(), "praxis-linux-package-"));
 try {
@@ -48,8 +54,18 @@ try {
     filter: (source) => source !== join(workspace, "node_modules", ".bin"),
   });
 
-  const bundle = JSON.stringify({ bundle: { resources: { [host]: "host" } } });
-  run("tauri", ["build", "--debug", "--bundles", "deb", "--ci", "--config", bundle, "--", "--locked"], desktop);
+  const setup = join(host, "setup");
+  await mkdir(setup);
+  for (const file of ["install-hermes-manager.mjs", "hermes-profile-setup.mjs", "hermes-manager-soul.md"]) {
+    await cp(join(repository, "scripts", file), join(setup, file));
+  }
+
+  const bundle = JSON.stringify({
+    ...(release ? { version: "1.0.0" } : {}),
+    bundle: { resources: { [host]: "host" } },
+  });
+  const profile = release ? [] : ["--debug"];
+  run("tauri", ["build", ...profile, "--bundles", "deb", "--ci", "--config", bundle, "--", "--locked"], desktop);
 } finally {
   await rm(workspace, { recursive: true, force: true });
 }

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,7 +7,7 @@ import { test } from "node:test";
 import { defaultSettings, readSettings, saveSettings } from "@praxis/settings";
 import { OperationalStore } from "@praxis/state";
 import { populateReports } from "../fixtures/reports.mjs";
-import { enter, eventually, startDesktop } from "./desktop-fixture.mjs";
+import { desktopPackageRoot, enter, eventually, startDesktop } from "./desktop-fixture.mjs";
 
 const up = "\uE013";
 const portableForm = 'form[aria-label="Portable settings"]';
@@ -41,8 +40,7 @@ async function fixture(t) {
   await mkdir(config, { recursive: true });
   await mkdir(downloads, { recursive: true });
   await writeFile(join(config, "user-dirs.dirs"), 'XDG_DOWNLOAD_DIR="$HOME/Downloads"\n');
-  const extracted = join(directory, "package");
-  execFileSync("dpkg-deb", ["-x", deb, extracted], { timeout: 15_000 });
+  const installed = desktopPackageRoot(deb, directory);
   const environment = Object.fromEntries(Object.keys(process.env)
     .filter((name) => name.startsWith("PRAXIS_"))
     .map((name) => [name, undefined]));
@@ -56,7 +54,7 @@ async function fixture(t) {
     PRAXIS_OPERATOR_TOKEN_DIGEST: createHash("sha256").update(token).digest("hex"),
   });
   const open = async () => {
-    app = await startDesktop(join(extracted, "usr/bin/praxis-desktop"), { environment });
+    app = await startDesktop(join(installed, "usr/bin/praxis-desktop"), { environment });
     assert.equal((await app.handles()).length, 1);
     await app.waitForText("praxis-host-launch [role=status]", "Local Praxis host ready.");
     return app;

@@ -4,7 +4,7 @@ The optional worker profile targets Hermes Agent 0.23.3 at `caafe5389ae585ef7738
 
 ## Install or replace
 
-Build Praxis with `npm ci` and `npm run build`. Build a trusted, clean checkout of [Axiom at `96014e73`](https://github.com/DanielssonThomas/Axiom/tree/96014e73ca14111be83c448898e41559f0f87f88) with `pnpm install --frozen-lockfile` and `pnpm build`.
+Build Praxis with `npm ci` and `npm run build`. Use the extracted [Axiom v1.0.0 runtime](desktop-release.md#install) as the pinned Axiom dependency.
 
 ```sh
 node scripts/install-hermes-worker.mjs \

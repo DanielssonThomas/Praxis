@@ -10,7 +10,7 @@ import { test } from "node:test";
 import { createPraxisMcpServer } from "@praxis/mcp";
 import { defaultSettings } from "@praxis/settings";
 import { OperationalStore } from "@praxis/state";
-import { enter, eventually, startDesktop } from "./desktop-fixture.mjs";
+import { desktopPackageRoot, enter, eventually, startDesktop } from "./desktop-fixture.mjs";
 import { scriptedUsage, startPackagedCodexProvider } from "./desktop-codex-provider.mjs";
 import { startNamedHermesFixture } from "./named-hermes-fixture.mjs";
 
@@ -124,8 +124,7 @@ test("packaged Manager approves one bounded Codex edit and restores its verified
     store.close();
     await rm(directory, { recursive: true, force: true });
   });
-  const installed = join(directory, "installed");
-  execFileSync("dpkg-deb", ["--extract", packagePath, installed]);
+  const installed = desktopPackageRoot(packagePath, directory);
   const host = join(installed, "usr/lib/Praxis/host");
   const release = execFileSync(program, ["--version"], { encoding: "utf8" }).trim();
   assert.equal(release, "codex-cli 0.172.0-alpha.2");
