@@ -126,6 +126,7 @@ test("packaged Settings edits an existing portable file, rejects invalid setting
   await app.waitForText("praxis-settings [role=status]", /settings.*(valid|check)|Check.*settings/i);
   assert.equal((await readSettings(settings)).manager.profile, "desktop-manager");
   assert.doesNotMatch(await readFile(settings, "utf8"), /INVALID PROFILE|operatorToken|apiKey/);
+  await app.execute("document.querySelector('praxis-settings [role=status]').scrollIntoView({block:'nearest'})");
   await capture(app, "settings-validation-narrow.png");
 
   await close();

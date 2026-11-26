@@ -46,5 +46,6 @@
     <label><input type="checkbox" name="memoryEnabled" [checked]="settings().memory.enabled"> Enable engineering memory</label>
     <label><input type="checkbox" name="autoPresent" [checked]="settings().display.autoPresent"> Present contextual cards automatically</label>
   </fieldset>
+  <p role="status">{{ feedback() }}</p>
   <button praxisButton type="submit" [disabled]="busy()">Save settings</button>
 </form>

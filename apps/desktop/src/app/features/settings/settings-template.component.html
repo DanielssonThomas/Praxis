@@ -1,5 +1,6 @@
 <h1>Settings</h1>
-<p role="status">{{ status() }}</p>
 @if (settings(); as current) {
-  <praxis-settings-form [settings]="current" [busy]="busy()" (submitted)="save($event)" />
+  <praxis-settings-form [settings]="current" [busy]="busy()" [feedback]="status()" (submitted)="save($event)" />
+} @else {
+  <p role="status">{{ status() }}</p>
 }

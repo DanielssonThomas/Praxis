@@ -11,6 +11,7 @@ import { ButtonAtom } from "../../../ui/button/button-atom.component";
 export class SettingsFormOrganism {
   readonly settings = input.required<PortableSettings>();
   readonly busy = input(false);
+  readonly feedback = input("");
   readonly submitted = output<PortableSettings>();
 
   protected submit(event: SubmitEvent): void {
