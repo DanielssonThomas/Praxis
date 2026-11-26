@@ -1,0 +1,38 @@
+<dialog #dialog aria-labelledby="activity-review-title" (cancel)="close($event)" (keydown.escape)="$event.stopPropagation()">
+  <header>
+    <h2 id="activity-review-title">Review request</h2>
+    <button praxisButton #closeButton class="close" type="button" aria-label="Close review" (click)="close()">
+      <span aria-hidden="true">×</span>
+    </button>
+  </header>
+  <div class="lifecycle" role="status">
+    <strong>{{ label() }}</strong>
+    @if (detail()) { <p>{{ detail() }}</p> }
+    @if (notice()) { <p>{{ notice() }}</p> }
+    @if (status()) { <p>{{ status() }}</p> }
+  </div>
+  <dl>
+    <div>
+      <dt>Requested action</dt>
+      <dd>{{ title() }} <code>{{ reviewed().action.kind }}</code></dd>
+    </div>
+    <div>
+      <dt>Target</dt>
+      <dd>{{ reviewed().action.target.kind }} <code>{{ reviewed().action.target.id }}</code></dd>
+    </div>
+    <div>
+      <dt>Requester</dt>
+      <dd><code>{{ reviewed().actorId }}</code></dd>
+    </div>
+    <div>
+      <dt>Expires</dt>
+      <dd><time [attr.datetime]="reviewed().phase.expiresAt">{{ expiry() }}</time></dd>
+    </div>
+  </dl>
+  <footer>
+    <button praxisButton type="button" class="approve" data-action="approve" [disabled]="!enabled()"
+      (click)="decided.emit('approve')">Approve once</button>
+    <button praxisButton type="button" data-action="deny" [disabled]="!enabled()"
+      (click)="decided.emit('deny')">Deny</button>
+  </footer>
+</dialog>

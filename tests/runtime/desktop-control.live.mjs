@@ -128,6 +128,7 @@ test("the packaged operator denies, fences and approves exact real Hermes worker
   if (evidence) await mkdir(evidence, { recursive: true });
   const selectors = {
     toggle: "#activity-toggle", panel: "praxis-activity-panel aside",
+    review: 'dialog[aria-labelledby="activity-review-title"][open]',
     manual: `article[data-session-id="${manual.session.id}"]`,
     approved: `article[data-request-id="${manual.requestId}"]`,
     denied: `article[data-request-id="${denied.requestId}"]`,
@@ -138,6 +139,26 @@ test("the packaged operator denies, fences and approves exact real Hermes worker
     selector, text,
   );
   const shows = (selector, text) => eventually(() => containing(selector, text), `Expected operator feedback: ${text}`);
+  const review = async (card, worker) => {
+    await click(`${card} [data-action="review"]`);
+    await shows(selectors.review, "session.stop");
+    await shows(selectors.review, worker.session.id);
+    await shows(selectors.review, grant.principalId);
+    assert.equal(await desktop.execute('return !!document.querySelector(arguments[0] + " time[datetime]")',
+      selectors.review), true);
+  };
+  const dismissReview = async () => {
+    await click(`${selectors.review} button[aria-label="Close review"]`);
+    await eventually(() => desktop.execute("return !document.querySelector(arguments[0])", selectors.review),
+      "The Activity review is still open.");
+  };
+  const assertDecision = (worker, kind) => {
+    const evaluation = store.eventsOfKind("action.evaluation").find(({ details }) => details.requestId === worker.requestId);
+    const decision = store.eventsOfKind("action.decision").find(({ details }) => details.requestId === worker.requestId);
+    assert.equal(evaluation?.details.transition.value.mode, "approval");
+    assert.equal(decision?.details.transition.value.kind, kind);
+    assert.equal(decision?.details.transition.value.approvalId, evaluation?.details.transition.value.approval.id);
+  };
   const unlock = async (form, token) => {
     await (await desktop.element(`form[aria-label="${form}"] input[type="password"]`)).type(token);
     await click(`form[aria-label="${form}"] button[type="submit"]`);
@@ -164,8 +185,21 @@ test("the packaged operator denies, fences and approves exact real Hermes worker
   await shows(selectors.panel, "An operator credential is required.");
   await unlock("Unlock activity", operator);
   await click(`${selectors.denied} [data-action="inspect"]`);
-  await click(`${selectors.denied} [data-action="deny"]`);
+  await review(selectors.denied, denied);
+  if (evidence) await desktop.screenshot(join(evidence, "activity-exact-review.png"));
+  await (await desktop.element(`${selectors.review} button[aria-label="Close review"]`)).type("\uE00C");
+  await eventually(() => desktop.execute("return !document.querySelector(arguments[0])", selectors.review),
+    "Escape did not close the Activity review.");
+  assert.equal(await desktop.execute("return document.activeElement === document.querySelector(arguments[0])",
+    `${selectors.denied} [data-action="review"]`), true);
+  await shows(selectors.denied, "Needs attention");
+  assert.equal(store.eventsOfKind("action.decision").length, 0);
+  await review(selectors.denied, denied);
+  await click(`${selectors.review} [data-action="deny"]`);
+  await shows(selectors.review, "Denied");
+  await dismissReview();
   await shows(selectors.denied, "Denied");
+  assertDecision(denied, "deny");
   assert.equal((await runtime.inspectAssignment(denied.assignment)).status, "running");
   await click(selectors.toggle);
 
@@ -175,8 +209,10 @@ test("the packaged operator denies, fences and approves exact real Hermes worker
   await shows(selectors.manual, "Manual control");
   await click(selectors.toggle);
   await click(`${selectors.approved} [data-action="inspect"]`);
-  await click(`${selectors.approved} [data-action="approve"]`);
-  await shows(selectors.panel, "Session control holds this action.");
+  await review(selectors.approved, manual);
+  await click(`${selectors.review} [data-action="approve"]`);
+  await shows(selectors.review, "Session control holds this action.");
+  await dismissReview();
   assert.equal(store.eventsOfKind("action.decision").length, 1);
   await click(selectors.toggle);
 
@@ -208,8 +244,12 @@ test("the packaged operator denies, fences and approves exact real Hermes worker
   await click(selectors.toggle);
   await unlock("Unlock activity", operator);
   await shows(selectors.denied, "Denied");
-  await click(`${selectors.approved} [data-action="approve"]`);
+  await review(selectors.approved, manual);
+  await click(`${selectors.review} [data-action="approve"]`);
+  await shows(selectors.review, "Stop requested. Hermes has yet to report a settled stop.");
+  await dismissReview();
   await shows(selectors.approved, "Stop requested. Hermes has yet to report a settled stop.");
+  assertDecision(manual, "approve");
   if (evidence) await desktop.screenshot(join(evidence, "activity-deny-and-approve.png"));
   holds[2].resolve();
   await until(async () => (await runtime.inspectAssignment(manual.assignment)).status === "stopped", "The approved exact worker did not stop.");

@@ -15,6 +15,7 @@ export class ShellMenuOrganism {
   readonly activeView = input.required<string>();
   readonly activityAvailable = input(false);
   readonly activityOpened = input(false);
+  readonly activityAttentionCount = input(0);
   readonly activityToggled = output<void>();
   protected readonly open = signal(false);
   protected readonly sections = computed(() => [
@@ -22,7 +23,12 @@ export class ShellMenuOrganism {
     { id: "configuration", label: "Configuration", views: this.views().filter(({ section }) => section === "configuration") },
   ]);
   private readonly toggle = viewChild.required("toggle", { read: ElementRef<HTMLButtonElement> });
+  private readonly activityToggle = viewChild("activityToggle", { read: ElementRef<HTMLButtonElement> });
   private readonly destinations = viewChildren<ElementRef<HTMLAnchorElement>>("destination");
+
+  focusActivity(): void {
+    this.activityToggle()?.nativeElement.focus();
+  }
 
   protected focusNavigation(event: Event): void {
     if (!this.open()) return;
