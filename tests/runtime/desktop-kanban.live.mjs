@@ -135,9 +135,13 @@ test("the packaged Kanban follows live native states and saves one scoped GitHub
 
   const card = (nativeStatus) => '[data-status="' + nativeStatus + '"] [data-native-id="' + id + '"]';
   const cardTrigger = (nativeStatus) => card(nativeStatus) + ' button[aria-haspopup="dialog"]';
+  const waitForDisplayedTitle = (selector, expected) => eventually(() => desktop.execute(
+    "const title = document.querySelector(arguments[0]); return !!title?.getClientRects().length && title.textContent.trim() === arguments[1]",
+    selector, expected,
+  ), "The native task title did not render.");
   const showDetails = async (selector, expected = title) => {
     await (await desktop.element(selector)).type(enter);
-    await desktop.waitForText(details + " h2", expected);
+    await waitForDisplayedTitle(details + " h2", expected);
   };
   const closeDetails = async (focusTarget) => {
     await (await desktop.element(details + ' [aria-label="Close task details"]')).type(enter);
@@ -145,7 +149,7 @@ test("the packaged Kanban follows live native states and saves one scoped GitHub
     await eventually(() => desktop.execute("return document.activeElement.matches(arguments[0])", focusTarget),
       "Closing details did not restore focus to the selected native task.");
   };
-  await desktop.waitForText(card("ready") + " h3", title);
+  await waitForDisplayedTitle(cardTrigger("ready"), title);
   assert.equal(await desktop.execute("return window.innerWidth"), 390);
   assert.equal(await desktop.execute("return getComputedStyle(document.querySelector('praxis-kanban-board .board')).display"),
     "grid", "the packaged WebView must apply Angular component styles");
