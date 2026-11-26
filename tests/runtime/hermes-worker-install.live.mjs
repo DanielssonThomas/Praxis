@@ -23,7 +23,7 @@ const token = () => randomBytes(32).toString("base64url");
 const tool = (name) => `mcp__praxis__${name}`;
 const allowed = ["inspect_task", "inspect_worker", "report_worker"].map(tool);
 const blocked = ["terminal", "execute_code", "write_file", "skill_manage", "delegate_task",
-  ...["request_action", "record_memory", "decide_skill_proposal"].map(tool)];
+  ...["request_action", "record_memory", "inspect_skill_proposals", "request_skill_review", "decide_skill_proposal"].map(tool)];
 
 async function listen(server) {
   server.listen(0, "127.0.0.1");
@@ -44,12 +44,6 @@ function toolReply(id, name, args) {
   return { finishReason: "tool_calls", message: { role: "assistant", content: null,
     tool_calls: [{ id: `call_${id}`, type: "function", function: { name, arguments: JSON.stringify(args) } }],
   } };
-}
-
-function invoke(id, names, name, args) {
-  if (names.includes(name)) return toolReply(id, name, args);
-  if (names.includes("tool_call")) return toolReply(id, "tool_call", { calls: [{ name, arguments: args }] });
-  return modelReply("The native profile did not expose the scoped tool.");
 }
 
 test("two installed native workers report concurrently and stay isolated with no manager", { timeout: 150_000 }, async (t) => {
@@ -131,23 +125,16 @@ test("two installed native workers report concurrently and stay isolated with no
       for (const name of names) worker.seen.add(name);
       const results = call.messages.slice(lastUser + 1).filter(({ role }) => role === "tool");
       const observed = JSON.stringify(results);
-      for (const { content } of results) {
-        try {
-          const schemas = JSON.parse(content).tools ?? {};
-          for (const [name, schema] of Object.entries(schemas)) if (schema?.parameters) worker.seen.add(name);
-        } catch { /* Non-description tool results are checked separately. */ }
-      }
-      if (!results.length && names.includes("tool_describe")) return toolReply("describe", "tool_describe", { names: [...allowed, ...blocked] });
       const report = { sessionId: worker.session.id, phase: "result", message: worker.proposal,
         occurredAt: "2026-11-26T10:00:00Z", submissionId: "event_praxis_worker_proposal" };
       if (!worker.reachedReport) {
         worker.reachedReport = true;
-        return { ...invoke("own_report", names, tool("report_worker"), report), holdAfterMessage: hold.promise };
+        return { ...toolReply("own_report", tool("report_worker"), report), holdAfterMessage: hold.promise };
       }
       if (!worker.ownReport) {
         worker.ownReport = observed.includes(worker.principal);
         if (!worker.ownReport) return modelReply("The worker could not record its report.");
-        return invoke("foreign_report", names, tool("report_worker"), { ...report, sessionId: other.session.id, submissionId: "event_foreign_worker_report" });
+        return toolReply("foreign_report", tool("report_worker"), { ...report, sessionId: other.session.id, submissionId: "event_foreign_worker_report" });
       }
       worker.deniedForeignReport = observed.includes("forbidden");
       return modelReply("The worker completed with its scoped permissions.");
@@ -191,7 +178,7 @@ test("two installed native workers report concurrently and stay isolated with no
     const complete = await completed(worker, worker.assignment);
     assert.equal(complete.output.text, "The worker completed with its scoped permissions.");
     assert.ok(worker.sawOwnProfile && !worker.sawOtherProfile, "Hermes loaded only the selected worker personality.");
-    assert.ok(allowed.every((name) => worker.seen.has(name)), "All scoped MCP tools are discoverable.");
+    assert.deepEqual([...worker.seen].filter((name) => name.startsWith("mcp__praxis__")).sort(), [...allowed].sort());
     assert.ok(blocked.every((name) => !worker.seen.has(name)), "Mutation and execution tools are absent from the native profile.");
     assert.ok(worker.ownReport && worker.deniedForeignReport, "The native worker can report only for its own scope.");
     assert.deepEqual(store.eventsFor(worker.session.id).map(({ details }) => details), [

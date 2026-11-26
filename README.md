@@ -25,4 +25,6 @@ Run `npm start` after building to run the Node host and its existing browser she
 
 See the [Hermes manager setup](docs/hermes-manager.md) to install the named Linux manager profile and connect it to Praxis MCP.
 
+See the [Hermes worker setup](docs/hermes-worker.md) to install a separate, scoped worker profile on Linux.
+
 The local worker API can run direct Codex assignments on the pinned Linux host. [Direct Codex workers](docs/codex-worker.md)

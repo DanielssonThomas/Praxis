@@ -12,13 +12,15 @@ const rootMarker = ".praxis-worker-root";
 const profileMarker = ".praxis-worker-seeded";
 const seedVersion = "1\n";
 const toolset = ["mcp-praxis"];
-const workerTools = ["inspect_task", "inspect_worker", "report_worker", "propose_skill"];
+const workerTools = ["inspect_task", "inspect_worker", "report_worker", "propose_skill", "load_curated_skill"];
 const usage = "node scripts/install-hermes-worker.mjs --hermes-bin PATH --hermes-home PATH --profile NAME [--axiom-root PATH] [--mcp-origin URL] [--replace]";
 
 async function configureProfile(native, profile, endpoint) {
   const config = [
     ["platform_toolsets", { cli: toolset, api_server: toolset }],
+    ["gateway.standalone", true],
     ["tools.connectors.enabled", false],
+    ["tools.tool_search.enabled", false],
     ["kanban.dispatch_in_gateway", false],
     ["mcp_servers.praxis", {
       url: endpoint,

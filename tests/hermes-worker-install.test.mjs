@@ -79,10 +79,12 @@ test("a worker installation configures only scoped Praxis tools and keeps creden
   const configPath = join(profileHome, "config.yaml");
   const config = JSON.parse(await readFile(configPath, "utf8"));
   assert.deepEqual(config.platform_toolsets, { cli: ["mcp-praxis"], api_server: ["mcp-praxis"] });
+  assert.equal(config["gateway.standalone"], true);
+  assert.equal(config["tools.tool_search.enabled"], false);
   assert.deepEqual(config["mcp_servers.praxis"], {
     url: "http://127.0.0.1:3211/mcp",
     headers: { Authorization: "Bearer ${PRAXIS_MCP_TOKEN}" },
-    tools: { include: ["inspect_task", "inspect_worker", "report_worker", "propose_skill"], prompts: false, resources: false },
+    tools: { include: ["inspect_task", "inspect_worker", "report_worker", "propose_skill", "load_curated_skill"], prompts: false, resources: false },
   });
   const soul = join(profileHome, "SOUL.md");
   const seed = await readFile(soul, "utf8");
