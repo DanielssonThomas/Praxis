@@ -18,7 +18,7 @@ import { providerFixture, startShell, stopProcess, until } from "./hermes-fixtur
 
 const execute = promisify(execFile);
 const finalReply = "The named manager read the fixture task.";
-const releases = { axiom: "96014e73ca14111be83c448898e41559f0f87f88", hermes: "caafe5389ae585ef77387a962aee05b1bcf17029" };
+const releases = { axiom: "ef35e6f5fb881db878a9547f124f8c28a08b414e", hermes: "caafe5389ae585ef77387a962aee05b1bcf17029" };
 const skills = ["context", "delegate", "design", "diagnose", "knowledge", "verify"];
 const schemas = ["inspect_task", "inspect_worker", "report_worker", "request_action"].map((name) => "mcp__praxis__" + name);
 const digest = (value) => createHash("sha256").update(value).digest("hex");

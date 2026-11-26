@@ -1,16 +1,16 @@
 # Install the Praxis Hermes manager
 
-The installer supports Linux x64 with Hermes Agent 0.23.3. The native setup was tested with Hermes source `caafe5389ae585ef77387a962aee05b1bcf17029`. The default manager uses the canonical Axiom core and its six skills from the governing Axiom revision `96014e73ca14111be83c448898e41559f0f87f88`. Optional Axiom profiles, other Hermes versions, other platforms, and release packaging require separate validation.
+The installer supports Linux x64 with Hermes Agent 0.23.3. The native setup was tested with Hermes source `caafe5389ae585ef77387a962aee05b1bcf17029`. The default manager uses the canonical Axiom core and its six skills from Axiom v1.0.0. The [desktop release guide](desktop-release.md) describes the packaged installer and checksum verification.
 
 ## Install
 
-Build Praxis with `npm ci` and `npm run build`. Build your trusted, clean checkout of [the pinned Axiom source](https://github.com/DanielssonThomas/Axiom/tree/96014e73ca14111be83c448898e41559f0f87f88) with `pnpm install --frozen-lockfile` and `pnpm build`. The installer assembles the default native artifact with Axiom's own assembler and verifies its pinned digest.
+Use the extracted Axiom v1 runtime. The installer assembles the default native artifact with Axiom's own assembler and verifies the qualified Hermes bundle digest. For a source development checkout, run `npm ci` and `npm run build` before invoking the source copy of the installer. [Axiom v1.0.0 assets](https://github.com/DanielssonThomas/Axiom/releases/tag/v1.0.0)
 
 ```sh
 node scripts/install-hermes-manager.mjs \
   --hermes-bin /absolute/path/to/hermes \
   --hermes-home /absolute/path/to/dedicated-praxis-hermes \
-  --axiom-root /absolute/path/to/built-axiom
+  --axiom-root /absolute/path/to/axiom-runtime
 ```
 
 Select an empty dedicated root or one previously initialized by this installer. The dedicated root has its own profiles and account state. The installer reads the manager profile name from [portable settings](settings.md). The default is `praxis-manager`. Use lowercase letters and digits separated by single hyphens in its name. Pass `--mcp-origin http://127.0.0.1:PORT/mcp` if Praxis MCP listens on a different local port.
@@ -36,7 +36,7 @@ With a built checkout of Praxis, use Chromium, the pinned Hermes source executab
 
 ```sh
 PRAXIS_HERMES_BIN=/absolute/path/to/hermes \
-PRAXIS_AXIOM_ROOT=/absolute/path/to/built-axiom \
+PRAXIS_AXIOM_ROOT=/absolute/path/to/axiom-runtime \
 node --test tests/runtime/hermes-manager-install.live.mjs
 ```
 

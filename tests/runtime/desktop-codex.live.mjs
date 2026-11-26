@@ -126,7 +126,7 @@ test("packaged Manager approves one bounded Codex edit and restores its verified
   });
   const installed = join(directory, "installed");
   execFileSync("dpkg-deb", ["--extract", packagePath, installed]);
-  const host = join(installed, "usr/lib/Praxis/host");
+  const host = process.env.PRAXIS_DESKTOP_USE_INSTALLED === "1" ? "/usr/lib/Praxis/host" : join(installed, "usr/lib/Praxis/host");
   const release = execFileSync(program, ["--version"], { encoding: "utf8" }).trim();
   assert.equal(release, "codex-cli 0.172.0-alpha.2");
   assert.equal(process.platform + "-" + process.arch, "linux-x64");

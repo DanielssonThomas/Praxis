@@ -7,7 +7,7 @@ import { SkillCurationError } from "./skills.js";
 import type { PublishedSkill, SkillEvaluation } from "./skills.js";
 
 const execute = promisify(execFile);
-const revision = "96014e73ca14111be83c448898e41559f0f87f88";
+const revision = "ef35e6f5fb881db878a9547f124f8c28a08b414e";
 
 interface PolicySource {
   path: string;

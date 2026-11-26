@@ -2,6 +2,8 @@
 
 Praxis is a local-first workstation for managing parallel Hermes agent sessions. The v1 desktop product uses Angular and Tauri with the existing local Node host. Track application and manager integration delivery in [epic #1](https://github.com/DanielssonThomas/Praxis/issues/1) and [epic #2](https://github.com/DanielssonThomas/Praxis/issues/2).
 
+Install the Linux x64 package and connect the default Manager using the [desktop release guide](docs/desktop-release.md).
+
 ## Development
 
 Use the Node.js release in [.node-version](.node-version) with its bundled npm. Run these commands from a clean checkout:

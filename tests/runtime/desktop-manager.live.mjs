@@ -37,7 +37,7 @@ test("packaged Manager reconnects real named Hermes output and Overview restores
     releaseManager();
     await desktop?.close();
     store.close();
-    await rm(directory, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true, maxRetries: 6, retryDelay: 100 });
   });
 
   const installed = join(directory, "installed");

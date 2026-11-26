@@ -6,8 +6,8 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 const execute = promisify(execFile);
-const axiomRevision = "96014e73ca14111be83c448898e41559f0f87f88";
-const bundleDigest = "sha256:1c8490c639d37160b46ac8946ba008839f5043103178afee32f8423c79d7b4cf";
+const axiomRevision = "ef35e6f5fb881db878a9547f124f8c28a08b414e";
+const bundleDigest = "sha256:59724db639fe977f032157fbaa3ee45b883a18bc152b6d0bc5e3b7ab9a337c9d";
 
 export async function present(path) {
   try {
@@ -79,21 +79,21 @@ export async function assembleAxiom(root, output) {
     const { stdout: status } = await git(["status", "--porcelain"]);
     if (revision.trim() === axiomRevision && !status) {
       const load = (path) => import(pathToFileURL(join(root, path)));
-      const { assembleBundles, writeBundles } = await load("packages/bundles/dist/index.js");
+      const { assembleBundles, loadBundleWorkspace, writeBundles } = await load("packages/bundles/dist/index.js");
       const { changeHermesPlugin, hermesBundleAdapter, inspectHermesActivation } = await load("adapters/hermes/dist/index.js");
-      const skills = ["context", "delegate", "design", "diagnose", "knowledge", "verify"].map((id) => ({ id }));
+      const { catalog, skills } = loadBundleWorkspace(root);
       const [artifact] = assembleBundles(root, {
-        version: "0.1.0", sourceRevision: axiomRevision, policyVersion: "1",
-        selectedProfiles: [], checks: {}, skills, adapters: [hermesBundleAdapter],
+        version: "0.1.0", sourceRevision: axiomRevision, policyVersion: catalog.core.version,
+        selectedProfiles: [], checks: catalog.checks, skills, adapters: [hermesBundleAdapter],
       });
       if (artifact.manifest.digest !== bundleDigest) throw new Error("The assembled Hermes bundle differs from the qualified artifact.");
       const [bundle] = writeBundles(output, [artifact]);
       return { bundle, changeHermesPlugin, inspectHermesActivation };
     }
   } catch {
-    throw new Error("Build and use a clean Axiom checkout of the pinned revision with its qualified Hermes bundle.");
+    throw new Error("Use the extracted Axiom v1 runtime with its qualified Hermes bundle.");
   }
-  throw new Error("Use a clean Axiom checkout of the pinned revision.");
+  throw new Error("Use the extracted runtime of Axiom v1.0.0.");
 }
 
 export function applyAxiom(axiom, target, update, replacementFlag = "--update") {

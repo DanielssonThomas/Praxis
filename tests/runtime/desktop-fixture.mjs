@@ -51,6 +51,7 @@ async function request(origin, method, pathname, payload, timeout = 6_000) {
 }
 
 export async function startDesktop(binary, { environment = {}, args = [], startupTimeout = 25_000 } = {}) {
+  const executable = process.env.PRAXIS_DESKTOP_USE_INSTALLED === '1' ? '/usr/bin/praxis-desktop' : binary;
   const port = await loopbackPort();
   const origin = `http://127.0.0.1:${port}`;
   const hostDesktop = Object.fromEntries(desktopEnvironmentKeys.flatMap((key) =>
@@ -98,7 +99,7 @@ export async function startDesktop(binary, { environment = {}, args = [], startu
       }
     }, 'WebKitWebDriver did not become ready.');
     const opened = await request(origin, 'POST', '/session', {
-      capabilities: { alwaysMatch: { 'webkitgtk:browserOptions': { binary, args } } },
+      capabilities: { alwaysMatch: { 'webkitgtk:browserOptions': { binary: executable, args } } },
     }, startupTimeout);
     session = opened.sessionId;
     assert.equal(typeof session, 'string');
