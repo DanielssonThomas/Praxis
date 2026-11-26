@@ -260,6 +260,7 @@ test("Manager retains history and the active turn across command navigation and 
   await command(page, "/o");
   await page.getByRole("heading", { name: "Overview", level: 1 }).waitFor();
   await command(page, "/m");
+  await page.getByRole("heading", { name: "Manager", level: 1 }).waitFor();
   await log.getByText("Partial fixture response.", { exact: true }).waitFor();
   await page.evaluate(() => window.managerFixture.disconnect());
   await page.getByText("The manager stream was interrupted. Reconnect to continue.").waitFor();

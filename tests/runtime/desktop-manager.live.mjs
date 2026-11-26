@@ -167,7 +167,7 @@ test("packaged Manager reconnects real named Hermes output and Overview restores
   if (evidence) await desktop.screenshot(join(evidence, "overview-live-workers.png"));
 
   await command("/m");
-  await desktop.waitForText("h1", "Manager");
+  await desktop.waitForText("#manager-lock", "Lock manager");
   await (await desktop.element("#manager-lock")).click();
   await unlock("Manager");
   await (await desktop.element("#manager-reconnect")).click();
