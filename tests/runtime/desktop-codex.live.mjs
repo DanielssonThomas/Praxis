@@ -230,6 +230,9 @@ test("packaged Manager approves one bounded Codex edit and restores its verified
   const confirmManager = async (item, prompt = item.prompt, expected = "Pending fixture " + item.task.id) => {
     await command(prompt);
     await shows('[role="log"]', expected);
+    await eventually(() => desktop.execute(
+      "return document.querySelector('praxis-manager .connection [role=status]')?.textContent.trim() === '';",
+    ), "The visible Manager turn did not settle.");
     return store.eventsOfKind("action.requested").find(({ details }) => details?.type === "action_request"
       && details.action.kind === "task.delegate" && details.action.target.id === item.task.id);
   };
