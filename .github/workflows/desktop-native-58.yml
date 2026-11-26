@@ -19,7 +19,7 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: 97dc5db94c17b730dab6748da7b2a64ccf11eabd
+          ref: 3c881146f11b9074be70aa191ea745f4dc2ead74
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
