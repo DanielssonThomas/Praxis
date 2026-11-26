@@ -194,6 +194,21 @@ test("packaged Reports charts operational values, scopes export, and clears hist
   assert.equal("interventions" in row.metrics, false);
   assert.ok(report.buckets.some(({ metrics }) => metrics.tokens === null));
 
+  async function changeCollection(enabled) {
+    await (await app.element(`${preferences} [name=collectionEnabled]`)).click();
+    await (await app.element(`${preferences} button[type=submit]`)).click();
+    await app.waitForText("praxis-reports [data-reports-status]", "Report preferences saved.");
+    assert.equal((await readSettings(settings)).reports.collectionEnabled, enabled);
+  }
+  await changeCollection(false);
+  assert.equal(await app.execute(`
+    const reports = document.querySelector("praxis-reports");
+    return reports.textContent.includes("Report collection is paused.")
+      && reports.querySelector("canvas") === null && reports.querySelector("[data-report-export]").disabled;
+  `), true);
+  await changeCollection(true);
+  await app.waitForText('[data-metric="tokens"] [data-chart-summary]', /20 on/);
+
   await (await app.element("[data-report-clear]")).click();
   await (await app.element("[data-confirm-report-clear]")).click();
   await app.waitForText("praxis-reports [data-reports-status]", "Report history cleared.");
@@ -203,6 +218,11 @@ test("packaged Reports charts operational values, scopes export, and clears hist
   audit.close();
   const persisted = (await readSettings(settings)).reports;
   assert.ok(persisted.clearedBefore);
+
+  const lock = await app.element("praxis-reports .controls button");
+  await lock.click();
+  await app.element(reportUnlock);
+  assert.equal(await app.execute("return document.querySelector('praxis-reports canvas') === null"), true);
 
   await navigate(app, "Settings");
   await eventually(() => app.execute("return !!document.querySelector('[name=managerProfile]')"),
