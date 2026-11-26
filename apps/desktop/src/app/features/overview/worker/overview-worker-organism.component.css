@@ -1,32 +1,171 @@
-:host { display: block; min-inline-size: 0; }
-:host([data-expanded="true"]) { grid-column: 1 / -1; }
-
-article {
-  display: grid;
-  gap: 0.3rem;
-  padding: 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: 0.55rem;
-  background: var(--panel);
-  overflow-wrap: anywhere;
-  transition: border-color 140ms ease;
+:host {
+  display: block;
+  min-inline-size: 0;
+  container-type: inline-size;
 }
 
-article[data-highlighted="true"] { border-color: var(--accent); }
-.heading { display: flex; align-items: start; justify-content: space-between; gap: 0.4rem; }
-h2, p { margin: 0; }
-h2 { font-size: 1rem; }
-p { color: var(--muted); }
-pre {
-  min-block-size: 3rem;
-  max-block-size: 8rem;
-  overflow: auto;
-  white-space: pre-wrap;
+.session-pane {
+  --pane-border: color-mix(in srgb, var(--border) 75%, var(--panel));
+  display: grid;
+  border: 1px solid var(--pane-border);
+  border-radius: 0.5rem;
+  background: var(--panel);
   overflow-wrap: anywhere;
-  margin: 0.2rem 0;
-  padding: 0.35rem;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+:host([data-expanded="true"]) .session-pane {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  box-shadow: 0 0.25rem 1rem color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.session-pane[data-highlighted="true"] { border-color: var(--accent); }
+
+header { padding: 0.65rem 0.85rem; }
+h2, h3, p, pre, dl, dd { margin: 0; }
+
+.ticket, pre, .identity {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+.ticket {
+  color: var(--muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.025em;
+}
+
+h2 {
+  margin-block-start: 0.18rem;
+  font-size: 0.875rem;
+  font-weight: 670;
+}
+
+.terminal {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  block-size: clamp(7rem, 17vh, 9rem);
+  border-block: 1px solid var(--pane-border);
   background: var(--surface);
 }
 
-:host([data-expanded="true"]) pre { max-block-size: 18rem; }
-@media (prefers-reduced-motion: reduce) { article { transition: none; } }
+pre {
+  box-sizing: border-box;
+  flex: 1;
+  min-block-size: 0;
+  overflow: auto;
+  padding: 0.65rem 0.85rem;
+  align-content: safe end;
+  color: var(--text);
+  font-size: 0.75rem;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overscroll-behavior-inline: contain;
+}
+
+pre:focus-visible, .disclosure:focus-visible { outline-offset: -3px; }
+.output-empty { color: var(--muted); }
+
+.output-notice {
+  padding: 0.45rem 0.85rem 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+:host([data-expanded="true"]) .terminal { block-size: clamp(8.5rem, 20vh, 14rem); }
+
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.65rem;
+  align-items: center;
+  padding-inline-start: 0.85rem;
+  font-size: 0.75rem;
+}
+
+.status, .association {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding-block: 0.3rem;
+}
+
+.status::before, .association::before {
+  content: "";
+  flex: none;
+  inline-size: 0.4rem;
+  block-size: 0.4rem;
+  border: 1px solid currentColor;
+}
+
+.status::before { border-radius: 50%; }
+.status { color: var(--muted); }
+.status[data-status="running"], .status[data-status="completed"], .association { color: var(--accent); }
+.status[data-status="running"]::before, .status[data-status="completed"]::before { background: currentColor; }
+.association::before { transform: rotate(45deg); }
+
+.disclosure[praxisButton] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-inline-start: auto;
+  border: 0;
+  min-block-size: 2rem;
+  scroll-margin-block: 0.25rem;
+  padding: 0.3rem 0.85rem 0.3rem 0.6rem;
+  color: var(--muted);
+}
+
+.chevron {
+  inline-size: 0.35rem;
+  block-size: 0.35rem;
+  border-inline-end: 1px solid currentColor;
+  border-block-end: 1px solid currentColor;
+  transform: translateY(-0.12rem) rotate(45deg);
+}
+
+.disclosure[aria-expanded="true"] .chevron { transform: translateY(0.08rem) rotate(225deg); }
+
+.details {
+  display: grid;
+  gap: 0.75rem 1rem;
+  padding: 0.75rem 0.85rem 0.85rem;
+  border-block-start: 1px solid var(--pane-border);
+  background: color-mix(in srgb, var(--panel) 68%, var(--surface));
+  border-end-start-radius: inherit;
+  border-end-end-radius: inherit;
+  font-size: 0.78rem;
+}
+
+@container (min-width: 30rem) {
+  .details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.details h3 {
+  margin-block-end: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.details dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-block-end: 1px solid var(--pane-border);
+  padding-block: 0.3rem;
+}
+
+.details dt { color: var(--muted); }
+.details dd { min-inline-size: 0; text-align: end; }
+.details p { color: var(--muted); }
+.usage-notice { margin-block-start: 0.4rem; }
+
+praxis-session-control {
+  margin-block-start: 0.55rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-pane { transition: none; }
+}

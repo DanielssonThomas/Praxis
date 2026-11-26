@@ -17,9 +17,12 @@
 }
 
 @if (kanban.stage() === "ready") {
+  @if (kanban.columns().length) { <p class="board-help">Select a task to inspect its details and GitHub issues.</p> }
   @if (kanban.providerMessage(); as message) {
     <p id="kanban-provider">{{ message }}</p>
   }
   <praxis-kanban-board [columns]="kanban.columns()" [canLink]="kanban.canLink()" [busy]="kanban.busy()"
-    (linkIssue)="kanban.link($event)" (openIssue)="kanban.open($event)" (invalidIssue)="kanban.invalidIssue()" />
+    [boardStatus]="kanban.status()" [providerMessage]="kanban.providerMessage()" [taskFeedback]="kanban.taskFeedback()"
+    (refreshRequested)="kanban.refresh()"
+    (linkIssue)="kanban.link($event)" (openIssue)="kanban.open($event)" (invalidIssue)="kanban.invalidIssue($event)" />
 }

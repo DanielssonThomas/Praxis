@@ -1,0 +1,47 @@
+<dialog #dialog id="kanban-task-details" aria-labelledby="kanban-task-title" (close)="closed.emit()">
+  @if (task(); as item) {
+    <header>
+      <h2 id="kanban-task-title">{{ item.task.title }}</h2>
+      <button praxisButton type="button" class="close" autofocus aria-label="Close task details" (click)="close()">×</button>
+    </header>
+
+    <dl>
+      <dt>Native task</dt><dd>{{ item.nativeId }}</dd>
+      <dt>Praxis task</dt><dd>{{ item.task.id }}</dd>
+      <dt>Status</dt><dd class="state">{{ nativeStatusLabel(item.status) }}</dd>
+      @if (item.assignee; as assignee) { <dt>Assignee</dt><dd>{{ assignee }}</dd> }
+    </dl>
+
+    @if (item.links.length || canLink() || providerMessage()) {
+      <section aria-labelledby="kanban-issues-title">
+        <h3 id="kanban-issues-title">GitHub issues</h3>
+        @if (item.links.length) {
+          <ul aria-label="Linked GitHub issues">
+            @for (issue of item.links; track issue.repository + '#' + issue.number) {
+              <li>
+                <button praxisButton type="button" class="issue" [attr.aria-disabled]="busy() || null"
+                  [attr.aria-label]="'Open ' + issue.repository + '#' + issue.number + ' in the browser'"
+                  (click)="open(item, issue)">{{ issue.repository }}#{{ issue.number }}</button>
+              </li>
+            }
+          </ul>
+        }
+        @if (providerMessage(); as message) { <p>{{ message }}</p> }
+        @if (canLink()) {
+          <form [attr.aria-label]="'Link a GitHub issue to ' + item.task.title" (submit)="submit($event, item, issue)">
+            <label>
+              GitHub issue
+              <input #issue type="text" name="issue" placeholder="owner/repo#42" required maxlength="158"
+                spellcheck="false" autocapitalize="none" aria-describedby="kanban-task-status">
+            </label>
+            <button praxisButton type="submit" [attr.aria-disabled]="busy() || null">Link issue</button>
+          </form>
+        }
+      </section>
+    }
+
+    <p id="kanban-task-status" role="status">{{ status() }}</p>
+    <button praxisButton type="button" class="refresh" [attr.aria-disabled]="busy() || null"
+      (click)="refreshRequested.emit()">Refresh board</button>
+  }
+</dialog>

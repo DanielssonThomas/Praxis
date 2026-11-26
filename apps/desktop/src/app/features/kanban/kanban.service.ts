@@ -3,7 +3,7 @@ import type { KanbanBoard, KanbanError, KanbanIssueTarget, KanbanLinkReceipt } f
 import { DesktopBridge } from "../../native/desktop-bridge.service";
 import { HostLaunchService } from "../../native/host-launch.service";
 import { groupByNativeStatus } from "./kanban.model";
-import type { KanbanStage } from "./kanban.model";
+import type { KanbanStage, KanbanTaskFeedback } from "./kanban.model";
 
 const unavailableMessage = "The desktop task board is unavailable.";
 const operatorMessage = "An operator credential is required.";
@@ -16,6 +16,7 @@ export class KanbanService {
   readonly stage = signal<KanbanStage>("loading");
   readonly busy = signal(false);
   readonly status = signal("Loading the native task board.");
+  readonly taskFeedback = signal<KanbanTaskFeedback | null>(null);
   readonly columns = computed(() => groupByNativeStatus(this.board()?.tasks ?? []));
   readonly canLink = computed(() => this.board()?.provider.available === true);
   readonly providerMessage = computed(() => {
@@ -71,16 +72,16 @@ export class KanbanService {
   async link(target: KanbanIssueTarget): Promise<void> {
     if (this.busy() || !this.canLink()) return;
     this.busy.set(true);
-    this.status.set("Verifying the GitHub issue.");
+    this.showTaskFeedback(target.nativeId, "Verifying the GitHub issue.");
     try {
       const result = await this.bridge.kanbanLinkIssue(target);
-      if (result.status === "error") this.showActionFailure(result.error);
+      if (result.status === "error") this.showActionFailure(target.nativeId, result.error);
       else {
         this.addVerifiedIssue(result.data);
-        this.status.set("GitHub issue linked.");
+        this.showTaskFeedback(target.nativeId, "GitHub issue linked.");
       }
     } catch {
-      this.status.set("The issue link is unavailable.");
+      this.showTaskFeedback(target.nativeId, "The issue link is unavailable.");
     } finally {
       this.busy.set(false);
     }
@@ -91,17 +92,17 @@ export class KanbanService {
     this.busy.set(true);
     try {
       const result = await this.bridge.kanbanOpenIssue(target);
-      if (result.status === "error") this.showActionFailure(result.error);
-      else this.status.set("GitHub issue opened in the browser.");
+      if (result.status === "error") this.showActionFailure(target.nativeId, result.error);
+      else this.showTaskFeedback(target.nativeId, "GitHub issue opened in the browser.");
     } catch {
-      this.status.set("The GitHub issue could not open in the browser.");
+      this.showTaskFeedback(target.nativeId, "The GitHub issue could not open in the browser.");
     } finally {
       this.busy.set(false);
     }
   }
 
-  invalidIssue(): void {
-    this.status.set("Enter a GitHub issue as owner/repo#42.");
+  invalidIssue(nativeId: string): void {
+    this.showTaskFeedback(nativeId, "Enter a GitHub issue as owner/repo#42.");
   }
 
   private async load(
@@ -109,6 +110,7 @@ export class KanbanService {
   ): Promise<void> {
     if (this.busy()) return;
     this.busy.set(true);
+    this.taskFeedback.set(null);
     this.status.set("Loading the native task board.");
     try {
       const result = await request();
@@ -137,12 +139,21 @@ export class KanbanService {
 
   private setLocked(): void {
     this.board.set(null);
+    this.taskFeedback.set(null);
     this.stage.set("locked");
   }
 
-  private showActionFailure(error: KanbanError): void {
-    if (error?.kind === "operator_required") this.setLocked();
-    this.status.set(errorMessage(error));
+  private showActionFailure(nativeId: string, error: KanbanError): void {
+    if (error?.kind === "operator_required") {
+      this.setLocked();
+      this.status.set(errorMessage(error));
+      return;
+    }
+    this.showTaskFeedback(nativeId, errorMessage(error));
+  }
+
+  private showTaskFeedback(nativeId: string, message: string): void {
+    this.taskFeedback.set({ nativeId, message });
   }
 
   private addVerifiedIssue({ taskId, issue }: KanbanLinkReceipt): void {

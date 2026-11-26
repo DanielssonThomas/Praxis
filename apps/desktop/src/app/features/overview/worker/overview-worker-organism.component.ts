@@ -1,4 +1,4 @@
-import { Component, computed, input, output } from "@angular/core";
+import { afterNextRender, Component, computed, inject, Injector, input, output } from "@angular/core";
 import type { OverviewPane } from "../../../native/desktop-bridge.service";
 import { ButtonAtom } from "../../../ui/button/button-atom.component";
 import { SessionControlMolecule } from "../control/session-control-molecule.component";
@@ -14,26 +14,47 @@ export class OverviewWorkerOrganism {
   readonly pane = input.required<OverviewPane>();
   readonly expanded = input.required<boolean>();
   readonly toggled = output<string>();
-  protected readonly state = computed(() => {
+
+  private readonly injector = inject(Injector);
+
+  protected readonly status = computed(() => {
     const runtime = this.pane().runtime;
-    return runtime.availability === "available" ? runtime.snapshot.status.replaceAll("_", " ") : "Unavailable";
+    return runtime.availability === "available" ? runtime.snapshot.status : "unavailable";
   });
-  protected readonly output = computed(() => {
+  protected readonly statusLabel = computed(() => {
+    const status = this.status().replaceAll("_", " ");
+    return status.charAt(0).toUpperCase() + status.slice(1);
+  });
+  protected readonly terminal = computed(() => {
     const runtime = this.pane().runtime;
-    if (runtime.availability === "unavailable") return runtime.reason;
+    if (runtime.availability === "unavailable") {
+      return { text: runtime.reason, truncated: false, hasOutput: false };
+    }
     const output = runtime.snapshot.output;
-    if (output.availability === "unavailable") return output.reason;
-    return (output.truncated ? "Earlier output omitted.\n" : "") + output.text;
+    if (output.availability === "unavailable") {
+      return { text: output.reason, truncated: false, hasOutput: false };
+    }
+    return {
+      text: output.text || "No session output available yet.",
+      truncated: output.truncated,
+      hasOutput: Boolean(output.text),
+    };
   });
   protected readonly usage = computed(() => {
     const runtime = this.pane().runtime;
-    if (runtime.availability === "unavailable") return "Usage unavailable";
-    const usage = runtime.usage;
-    if (usage.metering === "unknown") return usage.reason;
-    return [
-      usage.inputTokens == null ? "" : `Input tokens ${usage.inputTokens.toLocaleString()}`,
-      usage.outputTokens == null ? "" : `Output tokens ${usage.outputTokens.toLocaleString()}`,
-      usage.cost == null ? "" : `Cost ${usage.cost.amount} ${usage.cost.currency}`,
-    ].filter(Boolean).join(" · ");
+    return runtime.availability === "available"
+      ? runtime.usage
+      : { metering: "unknown", reason: "Usage unavailable." } as const;
   });
+
+  protected toggle(event: MouseEvent): void {
+    const disclosure = event.currentTarget as HTMLButtonElement;
+    this.toggled.emit(this.pane().session.id);
+    // Expanding the pane can move the focused disclosure outside the workspace.
+    afterNextRender(() => {
+      if (disclosure === disclosure.ownerDocument.activeElement) {
+        disclosure.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+    }, { injector: this.injector });
+  }
 }

@@ -1,5 +1,6 @@
-<praxis-shell-menu [views]="views" [activeView]="navigation.view().id"
+<praxis-shell-menu #menu [views]="views" [activeView]="navigation.view().id"
   [activityAvailable]="activity.supported" [activityOpened]="activity.opened()"
+  [activityAttentionCount]="activity.attentionCount()"
   (activityToggled)="activity.toggle()" />
 <div class="workspace">
   <main>
@@ -7,7 +8,7 @@
     <router-outlet />
   </main>
   @if (activity.supported) {
-    <praxis-activity-panel [hidden]="!activity.opened()" />
+    <praxis-activity-panel [hidden]="!activity.opened()" (dismissed)="menu.focusActivity()" />
   }
 </div>
 <praxis-command-bar
