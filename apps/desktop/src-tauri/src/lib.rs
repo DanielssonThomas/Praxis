@@ -1,21 +1,27 @@
 mod commands;
+mod models;
 mod services;
 mod state;
 
+use services::host_http::HostClient;
+use specta_typescript::Typescript;
 use state::host::ManagedHost;
+use std::path::Path;
 use tauri::{Manager, RunEvent};
+
+pub fn export_ipc_bindings(destination: impl AsRef<Path>) -> Result<(), specta_typescript::Error> {
+    commands::registry().export(Typescript::default(), destination)
+}
 
 pub fn run() -> tauri::Result<()> {
     tauri::Builder::default()
         .setup(|app| {
             let root = app.path().resource_dir()?.join("host");
+            app.manage(HostClient::new()?);
             app.manage(ManagedHost::start(root)?);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            commands::host::host_launch_status,
-            commands::host::retry_host
-        ])
+        .invoke_handler(commands::registry().invoke_handler())
         .build(tauri::generate_context!())?
         .run(|app, event| {
             if matches!(event, RunEvent::Exit) {

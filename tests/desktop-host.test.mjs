@@ -27,6 +27,11 @@ test("the desktop-owned host closes when its private launch pipe ends", { timeou
     exit.then(() => ""),
   ]);
   assert.match(ready, /^Praxis at http:\/\/127\.0\.0\.1:\d+\//);
+  const origin = ready.trim().slice("Praxis at ".length);
+  const status = await fetch(new URL("/api/desktop/status", origin), { signal: AbortSignal.timeout(2_000) });
+  assert.equal(status.status, 200);
+  assert.equal(status.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await status.json(), { protocolVersion: 1, nodeVersion: process.versions.node });
   host.stdin.end();
   const result = await Promise.race([exit, delay(2_000, null, { signal: abort.signal })]);
   assert.deepEqual(result, [0, null], "the desktop-owned host must exit normally after its owner disconnects");

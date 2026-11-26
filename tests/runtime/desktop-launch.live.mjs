@@ -11,6 +11,14 @@ const launchStatus = "praxis-host-launch [role=status]";
 const retryButton = "praxis-host-launch button";
 const readyMessage = "Local Praxis host ready.";
 
+async function verifyNativeStatus(desktop) {
+  await desktop.waitForText(launchStatus, readyMessage);
+  const description = await desktop.execute(
+    'return document.querySelector("praxis-host-launch [role=status]").getAttribute("title")',
+  );
+  assert.equal(description, `Node.js ${process.versions.node}`);
+}
+
 function execute(command, args) {
   return execFileSync(command, args, { encoding: "utf8", timeout: 10_000 }).trim();
 }
@@ -29,9 +37,12 @@ async function verifyLoopbackHost(executable) {
   assert.equal(listening.length, 1, "the sidecar should have exactly one listener");
   const address = listening[0].trim().split(/\s+/)[3];
   assert.match(address, /^127\.0\.0\.1:\d+$/);
-  const response = await fetch(`http://${address}/api/settings`, { signal: AbortSignal.timeout(4_000) });
+  const response = await fetch(`http://${address}/api/desktop/status`, { signal: AbortSignal.timeout(4_000) });
   assert.equal(response.status, 200);
-  assert.equal(typeof (await response.json()).manager.profile, "string");
+  assert.deepEqual(await response.json(), { protocolVersion: 1, nodeVersion: process.versions.node });
+  const settings = await fetch(`http://${address}/api/settings`, { signal: AbortSignal.timeout(4_000) });
+  assert.equal(settings.status, 200);
+  assert.equal(typeof (await settings.json()).manager.profile, "string");
   return pid;
 }
 
@@ -103,14 +114,14 @@ test("packaged Linux desktop recovers the local host and leaves independent Herm
 
     await rename(withheld, sidecar);
     await (await desktop.element(retryButton)).click();
-    await desktop.waitForText(launchStatus, readyMessage);
+    await verifyNativeStatus(desktop);
     const hostPid = await verifyLoopbackHost(sidecar);
     if (evidence) await desktop.screenshot(join(evidence, "desktop-host-ready.png"));
 
     process.kill(hostPid, "SIGKILL");
     await desktop.waitForText(launchStatus, "The local Praxis host stopped.");
     await (await desktop.element(retryButton)).click();
-    await desktop.waitForText(launchStatus, readyMessage);
+    await verifyNativeStatus(desktop);
     assert.notEqual(await verifyLoopbackHost(sidecar), hostPid);
     await closeWindow(binary, sidecar);
     await desktop.close();
@@ -118,7 +129,7 @@ test("packaged Linux desktop recovers the local host and leaves independent Herm
     assert.equal((await runtime.inspectAssignment(run)).status, "running");
 
     desktop = await startDesktop(binary, { environment });
-    await desktop.waitForText(launchStatus, readyMessage);
+    await verifyNativeStatus(desktop);
     assert.equal((await desktop.handles()).length, 1);
     await verifyLoopbackHost(sidecar);
     assert.equal((await runtime.inspectAssignment(run)).status, "running");

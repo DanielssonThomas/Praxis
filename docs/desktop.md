@@ -53,3 +53,18 @@ GDK_BACKEND=x11 xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- \
 ```
 
 Set `PRAXIS_DESKTOP_EVIDENCE_DIR` to capture failure and recovery screenshots.
+
+## Desktop IPC
+
+Rust owns the Serde wire models and Tauri command signatures. Register commands in `src-tauri/src/commands/mod.rs` so Tauri Specta derives invocation and TypeScript bindings from the same list. Keep the window permissions in `src-tauri/capabilities/main.json` scoped to the registered commands that the shell uses. Angular components use the dedicated bridge in `src/app/native`.
+
+```sh
+npm run build:desktop
+npm run generate:desktop-ipc
+npm run check:desktop-ipc
+npm run test:desktop-ipc-drift
+```
+
+Generation writes `apps/desktop/src/generated/desktop-ipc.ts`. Check in that output with the Rust change. The check generates into a temporary directory, compares the result with the checked-in file and exits with an error on drift. The drift regression changes a temporary copy and verifies the same comparison rejects it. CI runs both checks on Linux.
+
+The readiness command queries the supervised Node host and returns the running Node version when it is ready. Starting returns a null version and a bounded retry interval in milliseconds. The ready reply omits the retry interval. The Rust interval is a `u16`, which JavaScript represents exactly. Errors use stable codes and redacted messages. The native smoke verifies the displayed state against the running sidecar version.

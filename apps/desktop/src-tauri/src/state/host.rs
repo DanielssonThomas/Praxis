@@ -38,17 +38,6 @@ impl ManagedHost {
         }
     }
 
-    pub(crate) fn launch_message(&self) -> Option<&'static str> {
-        if self.endpoint().is_some() {
-            return None;
-        }
-        match self.status() {
-            LaunchStatus::Starting => Some("Starting the local Praxis host."),
-            LaunchStatus::Ready(_) => None,
-            LaunchStatus::Failed(message) => Some(message),
-        }
-    }
-
     pub(crate) fn retry(&self) -> Result<(), &'static str> {
         match self.commands.try_send(HostCommand::Retry) {
             Ok(()) | Err(TrySendError::Full(_)) => Ok(()),
@@ -68,7 +57,7 @@ impl ManagedHost {
         }
     }
 
-    fn status(&self) -> LaunchStatus {
+    pub(crate) fn status(&self) -> LaunchStatus {
         *self.status.read().unwrap_or_else(PoisonError::into_inner)
     }
 }
