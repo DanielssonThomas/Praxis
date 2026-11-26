@@ -28,6 +28,11 @@ type ExecutionDecision = Extract<Decision, { kind: "approve" | "routine" }>;
 type Settlement = StageValue<"settlement">;
 type Binding = { assignment: HermesAssignment; scopeDigest: string };
 
+export interface TaskDelegation {
+  preview(request: ActionRequest): Promise<string | undefined>;
+  execute(request: ActionRequest, scopeDigest: string): Promise<RuntimeSessionSnapshot>;
+}
+
 export type ApprovalActivity = ActionRequest & (
   | { state: "processing" }
   | { state: "attention"; approval: Approval; expiresAt: string }
@@ -68,6 +73,10 @@ function readRequest(event: Event | undefined): ActionRequest {
   return { requestId: event.id, action, actorId };
 }
 
+function isTaskDelegation({ action }: ActionRequest): boolean {
+  return action.kind === "task.delegate" && action.target.kind === "task";
+}
+
 function isConflict(error: unknown): boolean {
   return error instanceof OperationalStoreError && error.code === "identity_conflict";
 }
@@ -76,6 +85,7 @@ export class ApprovalService {
   readonly #store: OperationalStore;
   readonly #loadGrants: () => Promise<unknown>;
   readonly #runtime: Pick<HermesRuntime, "inspectAssignment" | "stopAssignment">;
+  readonly #taskDelegation?: TaskDelegation;
   readonly #now: () => number;
   readonly #inFlight = new Set<string>();
 
@@ -83,11 +93,13 @@ export class ApprovalService {
     store: OperationalStore;
     loadGrants: () => Promise<unknown>;
     runtime: Pick<HermesRuntime, "inspectAssignment" | "stopAssignment">;
+    taskDelegation?: TaskDelegation;
     now?: () => number;
   }) {
     this.#store = options.store;
     this.#loadGrants = options.loadGrants;
     this.#runtime = options.runtime;
+    this.#taskDelegation = options.taskDelegation;
     this.#now = options.now ?? Date.now;
   }
 
@@ -120,7 +132,7 @@ export class ApprovalService {
     if (!id.success) throw new ApprovalError("invalid_input", "Supply a valid action request ID.");
     const request = readRequest(this.#store.getEvent(id.data));
     const grants = await this.#grants();
-    const review = this.#readStage(request, "evaluation") ?? this.#evaluate(request, grants);
+    const review = this.#readStage(request, "evaluation") ?? await this.#evaluate(request, grants);
     if (review.mode === "routine" && this.#readStage(request, "decision") === undefined) {
       try {
         await this.#execute(request, review, { kind: "routine", scopeDigest: review.scopeDigest });
@@ -154,7 +166,8 @@ export class ApprovalService {
       this.#claim(request, { ...decision, kind: "deny" });
     } else {
       try {
-        this.#requireBinding(request, review, grants);
+        if (isTaskDelegation(request)) await this.#requireDelegation(request, review, grants);
+        else this.#requireBinding(request, review, grants);
       } catch (error) {
         this.#invalidate(request, review, error);
         throw error;
@@ -180,17 +193,31 @@ export class ApprovalService {
     return { assignment, scopeDigest: digest({ actorId, action, grant, assignment }) };
   }
 
-  #evaluate(request: ActionRequest, grants: McpGrant[]): Evaluation {
-    const binding = this.#binding(request, grants);
+  #canDelegate({ actorId, action }: ActionRequest, grants: McpGrant[]): boolean {
+    const { target } = action;
+    return this.#taskDelegation !== undefined && target.kind === "task"
+      && grants.some((grant) => grant.principalId === actorId && grant.actionKinds.includes(action.kind)
+        && grant.taskIds.includes(target.id));
+  }
+
+  async #delegationScope(request: ActionRequest, grants: McpGrant[]): Promise<string | undefined> {
+    if (!this.#canDelegate(request, grants)) return;
+    const scope = await this.#taskDelegation?.preview(request);
+    if (scope !== undefined && /^[a-f0-9]{64}$/.test(scope)) return scope;
+  }
+
+  async #evaluate(request: ActionRequest, grants: McpGrant[]): Promise<Evaluation> {
+    const scopeDigest = isTaskDelegation(request) ? await this.#delegationScope(request, grants)
+      : this.#binding(request, grants)?.scopeDigest;
     let value: Evaluation;
-    if (binding === undefined) {
+    if (scopeDigest === undefined) {
       value = { mode: "refused", reason: "No trusted runtime scope authorizes this action and target." };
     } else if (request.action.kind === "session.inspect") {
-      value = { mode: "routine", scopeDigest: binding.scopeDigest };
+      value = { mode: "routine", scopeDigest };
     } else {
       value = {
         mode: "approval",
-        scopeDigest: binding.scopeDigest,
+        scopeDigest,
         approval: approvalSchema.parse({
           schemaVersion: contractVersion,
           id: `approval_${digest(request.action.id)}`,
@@ -209,10 +236,22 @@ export class ApprovalService {
     return value;
   }
 
-  #requireBinding(request: ActionRequest, review: ActiveEvaluation, grants: McpGrant[]): Binding {
+  #requireUnexpired(review: ActiveEvaluation): void {
     if (review.mode === "approval" && this.#now() >= Date.parse(review.expiresAt)) {
       throw new ApprovalError("expired", "This approval expired. A new action request is required.");
     }
+  }
+
+  async #requireDelegation(request: ActionRequest, review: ActiveEvaluation, grants: McpGrant[]): Promise<void> {
+    this.#requireUnexpired(review);
+    if (await this.#delegationScope(request, grants) !== review.scopeDigest) {
+      throw new ApprovalError("invalidated", "The approved task delegation scope changed. A new request is required.");
+    }
+    this.#requireUnexpired(review);
+  }
+
+  #requireBinding(request: ActionRequest, review: ActiveEvaluation, grants: McpGrant[]): Binding {
+    this.#requireUnexpired(review);
     const binding = this.#binding(request, grants);
     if (binding?.scopeDigest !== review.scopeDigest) {
       throw new ApprovalError("invalidated", "The actor grant or native assignment changed. A new request is required.");
@@ -252,29 +291,39 @@ export class ApprovalService {
   }
 
   async #execute(request: ActionRequest, review: ActiveEvaluation, decision: ExecutionDecision): Promise<void> {
+    const delegate = isTaskDelegation(request);
     const routine = request.action.kind === "session.inspect" && review.mode === "routine" && decision.kind === "routine";
-    const approved = request.action.kind === "session.stop" && review.mode === "approval" && decision.kind === "approve"
+    const approved = (request.action.kind === "session.stop" || delegate) && review.mode === "approval" && decision.kind === "approve"
       && review.approval.actionId === request.action.id && review.approval.id === decision.approvalId;
     if (!routine && !approved) throw new ApprovalError("invalid_approval", "The decision does not authorize this exact action.");
     const { id: sessionId } = request.action.target;
-    const revision = approved ? randomUUID() : undefined;
+    const revision = approved && !delegate ? randomUUID() : undefined;
     this.#claim(request, decision, revision);
     this.#inFlight.add(request.action.id);
     let mayHaveDispatched = false;
     try {
       let result: Settlement;
       try {
-        const binding = this.#requireBinding(request, review, await this.#grants());
-        const native = runtimeSessionSnapshotSchema.parse(routine
-          ? await this.#runtime.inspectAssignment(binding.assignment)
-          : await this.#runtime.stopAssignment(binding.assignment, async () => {
-            this.#requireBinding(request, review, await this.#grants());
-            mayHaveDispatched = true;
-          }));
-        if (native.taskId !== binding.assignment.taskId || native.sessionId !== binding.assignment.sessionId) {
-          throw new Error("The native receipt identified another assignment");
+        if (delegate && this.#taskDelegation !== undefined) {
+          await this.#requireDelegation(request, review, await this.#grants());
+          const native = runtimeSessionSnapshotSchema.parse(await this.#taskDelegation.execute(request, review.scopeDigest));
+          if (native.taskId !== request.action.target.id || this.#store.getSession(native.sessionId)?.taskId !== native.taskId) {
+            throw new Error("The native receipt identified another delegated task");
+          }
+          result = { outcome: "resolved", native };
+        } else {
+          const binding = this.#requireBinding(request, review, await this.#grants());
+          const native = runtimeSessionSnapshotSchema.parse(routine
+            ? await this.#runtime.inspectAssignment(binding.assignment)
+            : await this.#runtime.stopAssignment(binding.assignment, async () => {
+              this.#requireBinding(request, review, await this.#grants());
+              mayHaveDispatched = true;
+            }));
+          if (native.taskId !== binding.assignment.taskId || native.sessionId !== binding.assignment.sessionId) {
+            throw new Error("The native receipt identified another assignment");
+          }
+          result = { outcome: "resolved", native };
         }
-        result = { outcome: "resolved", native };
       } catch (error) {
         const refused = error instanceof HermesRuntimeError
           && ["native_refused", "unauthorized", "not_found", "unsupported"].includes(error.code);
@@ -314,7 +363,14 @@ export class ApprovalService {
     if (evaluation.mode === "refused") return { ...request, state: "refused", reason: evaluation.reason };
 
     try {
-      this.#requireBinding(request, evaluation, grants);
+      if (isTaskDelegation(request)) {
+        this.#requireUnexpired(evaluation);
+        if (!this.#canDelegate(request, grants)) {
+          throw new ApprovalError("invalidated", "The actor no longer has scope to delegate this task.");
+        }
+      } else {
+        this.#requireBinding(request, evaluation, grants);
+      }
     } catch (error) {
       if (error instanceof ApprovalError && (error.code === "expired" || error.code === "invalidated")) {
         this.#invalidate(request, evaluation, error);

@@ -20,7 +20,7 @@ function grant(assignments = []) {
   };
 }
 
-function prepare(t, beforeInspect) {
+function prepare(t, beforeInspect, loadCodex) {
   const store = new OperationalStore(":memory:");
   t.after(() => store.close());
   const assignments = Array.from({ length: 11 }, (_, index) => {
@@ -35,6 +35,7 @@ function prepare(t, beforeInspect) {
   const calls = [];
   const overview = new OverviewService({
     store,
+    loadCodex,
     loadGrants: async () => [grant(registered)],
     controls: { view: () => ({ mode: "read_only" }) },
     runtime: {
@@ -52,7 +53,7 @@ function prepare(t, beforeInspect) {
       },
     },
   });
-  return { overview, assignments, calls, register: (next) => { registered = next; } };
+  return { overview, assignments, calls, store, register: (next) => { registered = next; } };
 }
 
 const sessionIds = (projection) => projection.panes.map(({ session }) => session.id);
@@ -113,6 +114,33 @@ test("overlapping Overview reads keep different pages and coalesce a clamped ali
   assert.equal(calls.filter(({ runId }) => runId === "run_page_11").length, 1);
   firstHold.resolve();
   assert.equal((await first).panes.length, 10);
+});
+
+test("Overview pages a persisted Codex run beside Hermes and exposes its exact read-only observation", async (t) => {
+  const task = { schemaVersion: 1, id: "task_page_codex", title: "Codex paging fixture" };
+  const session = { schemaVersion: 1, id: "session_page_codex", taskId: task.id };
+  const assignment = { schemaVersion: 1, taskId: task.id, sessionId: session.id, runtime: "codex", runId: "worker_page_codex" };
+  const output = { availability: "available", text: "Exact retained worker output", truncated: false };
+  const snapshot = { schemaVersion: 1, taskId: task.id, sessionId: session.id, status: "completed", output };
+  const usage = { schemaVersion: 1, sessionId: session.id, id: "usage_worker_page_codex", metering: "reported", inputTokens: 9 };
+  const foreign = { ...snapshot, taskId: "task_unrelated" };
+  let registration = { assignment, observation: { snapshot: foreign, usage } };
+  const { overview, calls, store } = prepare(t, undefined, async () => [registration]);
+  store.recordTask(task);
+  store.recordSession(session);
+  assert.deepEqual(sessionIds(await overview.list(2)), ["session_page_11"]);
+
+  registration = { assignment, observation: { snapshot, usage } };
+  const page = await overview.list(2);
+  assert.deepEqual(sessionIds(page), ["session_page_11", session.id]);
+  const pane = page.panes[1];
+  assert.deepEqual(pane.worker, { runtime: "codex", runId: assignment.runId });
+  assert.deepEqual(pane.runtime, { availability: "available", snapshot, usage });
+  assert.equal(pane.control.mode, "read_only");
+  assert.equal(pane.control.canTakeover, false);
+  assert.match(pane.control.unavailableReason, /unavailable for this Codex worker/);
+  assert.deepEqual(store.getUsage(usage.id), usage);
+  assert.ok(calls.every(({ runId }) => runId === "run_page_11"));
 });
 
 test("Overview paging authenticates before exposing page metadata or validation errors", async (t) => {

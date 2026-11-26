@@ -27,3 +27,5 @@ Build and run `npm run test:control:live` with `PRAXIS_HERMES_BIN` pointing at H
 ## Native desktop Overview
 
 In the packaged desktop, open **Overview** or run `/o`, then enter the local operator credential. The view reads registered sessions from the same Node host used by the browser shell. The native bridge keeps the verified credential in memory until you lock the view or close Praxis. Session output remains bounded and distinguishes an unavailable or truncated replay from live text. Expanding one worker collapses the previous one. Overview reconnects to independently running sessions after Praxis is reopened.
+
+An approved [direct Codex assignment](codex-worker.md) appears on the same Overview pages. Its expanded details show the Codex run identity and any reported usage. The independent worker records the latest bounded observation so the window can reopen to the same run. Codex uses a read-only pane with its control availability shown explicitly.

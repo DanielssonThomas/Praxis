@@ -4,8 +4,8 @@ import { resolve } from "node:path";
 import { ApprovalError } from "@praxis/approvals";
 import type { ApprovalActivity } from "@praxis/approvals";
 import { localOperatorGuard, readOperatorJson } from "@praxis/approvals/http";
-import { principalIdSchema } from "@praxis/contracts";
-import type { RuntimeSessionSnapshot, Session, Task, Usage } from "@praxis/contracts";
+import { principalIdSchema, runtimeSessionSnapshotSchema, usageSchema, workerAssignmentSchema } from "@praxis/contracts";
+import type { RuntimeSessionSnapshot, Session, Task, Usage, WorkerAssignment, WorkerObservation } from "@praxis/contracts";
 import { HermesRuntime, HermesRuntimeError } from "@praxis/hermes-runtime";
 import type { HermesAssignment, HermesOutputCursor } from "@praxis/hermes-runtime";
 import { mcpAuthoritySchema } from "@praxis/mcp";
@@ -24,7 +24,8 @@ export interface OverviewPane {
   ticket: string;
   highlighted: boolean;
   runtime: PaneRuntime;
-  control: SessionControlView;
+  control: SessionControlView & { unavailableReason?: string };
+  worker?: { runtime: "codex"; runId: string };
   usageNotice?: string;
 }
 export interface OverviewProjection {
@@ -37,11 +38,13 @@ const paneLimit = 10;
 const maximumPage = 0xffff_ffff;
 const invalidPage = "Supply a positive whole Overview page number.";
 const settledStatuses = new Set<RuntimeSessionSnapshot["status"]>(["completed", "failed", "stopped", "interrupted"]);
+type LoadCodex = () => Promise<readonly { assignment: WorkerAssignment; observation: WorkerObservation }[]>;
 interface OverviewOptions {
   store: OperationalStore;
   runtime: Pick<HermesRuntime, "inspectLiveAssignment">;
   loadGrants: () => Promise<McpGrant[]>;
   loadActivity?: () => Promise<ApprovalActivity[]>;
+  loadCodex?: LoadCodex;
   managerPrincipal?: string;
   controls: SessionControlService;
 }
@@ -99,29 +102,41 @@ export class OverviewService {
   }
 
   async #project(requestedPage: number): Promise<OverviewProjection> {
-    const { store, loadGrants, loadActivity, managerPrincipal, controls } = this.#options;
+    const { store, loadGrants, loadActivity, loadCodex, managerPrincipal, controls } = this.#options;
     const grants = await loadGrants();
-    const eligible = assignmentsFor(grants).flatMap((binding) => {
+    const hermes = assignmentsFor(grants).flatMap((binding) => {
       const { assignment } = binding;
       const session = store.getSession(assignment.sessionId);
       const task = store.getTask(assignment.taskId);
       return session !== undefined && task !== undefined && session.taskId === task.id
-        ? [{ binding, assignment, session, task, key: JSON.stringify([task.id, session.id, assignment.runId]) }] : [];
+        ? [{ kind: "hermes" as const, binding, assignment, session, task, key: JSON.stringify([task.id, session.id, assignment.runId]) }] : [];
     });
+    const seen = new Set(hermes.map(({ session }) => session.id));
+    const registrations = loadCodex === undefined ? [] : await loadCodex().catch(() => []);
+    const codex = registrations.flatMap((entry) => {
+      const assignment = workerAssignmentSchema.safeParse(entry.assignment);
+      const snapshot = runtimeSessionSnapshotSchema.safeParse(entry.observation.snapshot);
+      const usage = usageSchema.safeParse(entry.observation.usage);
+      if (!assignment.success || assignment.data.runtime !== "codex" || !snapshot.success || !usage.success) return [];
+      const { taskId, sessionId, runId } = assignment.data;
+      const session = store.getSession(sessionId);
+      const task = store.getTask(taskId);
+      if (session?.taskId !== taskId || task === undefined || seen.has(sessionId) || snapshot.data.taskId !== taskId
+        || snapshot.data.sessionId !== sessionId || usage.data.sessionId !== sessionId || usage.data.id !== `usage_${runId}`) return [];
+      seen.add(sessionId);
+      return [{ kind: "codex" as const, task, session, runId, snapshot: snapshot.data, usage: usage.data }];
+    });
+    const eligible = [...hermes, ...codex];
     const count = Math.max(1, Math.ceil(eligible.length / paneLimit));
     const number = Math.min(requestedPage, count);
     const offset = (number - 1) * paneLimit;
     const page = { number, count };
 
-    const active = new Set(eligible.map(({ key }) => key));
+    const active = new Set(hermes.map(({ key }) => key));
     for (const key of this.#observations.keys()) {
       if (!active.has(key)) this.#observations.delete(key);
     }
-    const registered = eligible.slice(offset, offset + paneLimit).map((pane) => {
-      const observation = this.#observations.get(pane.key) ?? {};
-      this.#observations.set(pane.key, observation);
-      return { ...pane, observation };
-    });
+    const registered = eligible.slice(offset, offset + paneLimit);
 
     let association: OverviewProjection["association"] = { available: false, reason: "A manager activity principal is not configured." };
     let highlighted: Session["id"] | undefined;
@@ -141,11 +156,27 @@ export class OverviewService {
       }
     }
 
-    const panes = await Promise.all(registered.map(async ({ binding, assignment, session, task, observation }): Promise<OverviewPane> => {
+    const panes = await Promise.all(registered.map(async (pane): Promise<OverviewPane> => {
+      const { session, task } = pane;
       const links = store.eventsFor(task.id).flatMap(({ details }) => details?.type === "issue_link" ? [details.issue] : []);
       const issue = links.at(-1);
       const ticket = issue === undefined ? task.id : `${issue.repository}#${issue.number}`;
-      const observed = await this.#observe(assignment, observation);
+      let observed: PaneRuntime;
+      let control: OverviewPane["control"];
+      let worker: OverviewPane["worker"];
+      if (pane.kind === "codex") {
+        observed = { availability: "available", snapshot: pane.snapshot, usage: pane.usage };
+        control = {
+          mode: "read_only", canTakeover: false, canGuide: false, canReturn: false, guidance: "none",
+          unavailableReason: "Takeover, guidance, and handback are unavailable for this Codex worker.",
+        };
+        worker = { runtime: "codex", runId: pane.runId };
+      } else {
+        const observation = this.#observations.get(pane.key) ?? {};
+        this.#observations.set(pane.key, observation);
+        observed = await this.#observe(pane.assignment, observation);
+        control = controls.view(pane.binding, observed.availability === "available" && observed.snapshot.status === "running");
+      }
       let usageNotice: string | undefined;
       if (observed.availability === "available" && observed.usage.metering === "reported"
         && settledStatuses.has(observed.snapshot.status)) {
@@ -159,7 +190,7 @@ export class OverviewService {
       }
       return {
         task, session, ticket, runtime: observed, usageNotice, highlighted: session.id === highlighted,
-        control: controls.view(binding, observed.availability === "available" && observed.snapshot.status === "running"),
+        control, worker,
       };
     }));
     return { panes, association, page };
@@ -191,7 +222,7 @@ function send(response: ServerResponse, status: number, value: unknown): void {
   response.end(JSON.stringify(value));
 }
 
-export async function overviewRoutesFromEnv(loadActivity?: () => Promise<ApprovalActivity[]>) {
+export async function overviewRoutesFromEnv(loadActivity?: () => Promise<ApprovalActivity[]>, loadCodex?: LoadCodex) {
   const file = process.env.PRAXIS_MCP_CONFIG_FILE;
   const origin = process.env.PRAXIS_HERMES_ORIGIN;
   const key = process.env.PRAXIS_HERMES_API_KEY;
@@ -218,7 +249,7 @@ export async function overviewRoutesFromEnv(loadActivity?: () => Promise<Approva
       if (binding !== undefined && store.getSession(id)?.taskId === binding.assignment.taskId) return binding;
     },
   });
-  const view = new OverviewService({ store, runtime, loadGrants, loadActivity, managerPrincipal, controls });
+  const view = new OverviewService({ store, runtime, loadGrants, loadActivity, loadCodex, managerPrincipal, controls });
 
   async function serve(request: IncomingMessage, response: ServerResponse): Promise<boolean> {
     const target = request.url ?? "";

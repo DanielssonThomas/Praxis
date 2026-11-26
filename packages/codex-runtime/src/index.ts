@@ -38,9 +38,11 @@ export interface CodexExecutorOptions {
   axiomRoot: string;
   root: string;
   model: string;
+  workspaceOnly?: boolean;
   prepareWorkspace?: (scope: Staging) => Promise<void>;
   prepareProfile?: (scope: Staging) => Promise<void>;
   selectedSkills?: (scope: Pick<Staging, "task" | "session" | "signal">) => Promise<readonly CodexSkillResource[]>;
+  authorizeLaunch?: (scope: Staging) => Promise<void>;
 }
 
 type ErrorCode = "invalid_input" | "unsupported" | "assignment_mismatch" | "not_found" | "unavailable";
@@ -157,11 +159,13 @@ export class CodexExecutor implements WorkerExecutor {
       const profile = { program: this.#options.program, workspace, home: codexHome, userHome, environment: environment() };
       await axiom.prepare(profile, brief, privatePaths[2], signal);
       signal.throwIfAborted();
+      await this.#options.authorizeLaunch?.(staging);
+      signal.throwIfAborted();
       const assignment = workerAssignmentSchema.parse({
         schemaVersion: contractVersion, taskId: task.id, sessionId: session.id, runtime: "codex", runId: `worker_${randomUUID()}`,
       });
       run = new CodexRun(profile, this.#options.model, `Axiom scoped task brief supplied by the caller:\n${JSON.stringify(brief)}`,
-        deadline - performance.now());
+        deadline - performance.now(), this.#options.workspaceOnly);
       await run.started;
       const closed = run.finished.then(async () => {
         limits.active--;

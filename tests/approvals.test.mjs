@@ -49,6 +49,7 @@ function fixture(t, settings = {}) {
       store: databaseStore,
       loadGrants: async () => grants,
       now: () => time.now,
+      taskDelegation: settings.taskDelegation,
       runtime: {
         async inspectAssignment(reference) {
           calls.push({ method: "inspect", reference });
@@ -132,6 +133,49 @@ test("denial, expired approval and live grant replacement cannot execute native 
   assert.equal(states.get(stale.requestId), "invalidated");
   grants[0].sessions[0].assignment.runId = assignment.runId;
   await assert.rejects(approval.decide(decision(stale)), { code: "invalidated" });
+  assert.deepEqual(calls, []);
+});
+
+test("an exact task delegation approval launches once and denies stale or refused requests", async (t) => {
+  let scope = "a".repeat(64);
+  const delegated = [];
+  const native = {
+    schemaVersion: 1, taskId: task.id, sessionId: session.id, status: "running",
+    output: { availability: "unavailable", reason: "The worker has started." },
+  };
+  const { service, request, grants, open, calls } = fixture(t, {
+    taskDelegation: {
+      async preview(item) {
+        assert.equal(item.actorId, actor);
+        assert.deepEqual(item.action.target, { kind: "task", id: task.id });
+        return scope;
+      },
+      async execute(item, fingerprint) {
+        delegated.push({ requestId: item.requestId, fingerprint });
+        return native;
+      },
+    },
+  });
+  grants[0].actionKinds.push("task.delegate");
+  const taskRequest = (id) => request(id, "task.delegate", { kind: "task", id: task.id });
+  const approval = service();
+  const allowed = taskRequest("task_allow");
+  const attention = await approval.inspect(allowed.id);
+  assert.equal(attention.state, "attention");
+  assert.deepEqual(delegated, []);
+  const outcome = await approval.decide(decision(attention));
+  assert.equal(outcome.state, "resolved");
+  assert.deepEqual(outcome.native, native);
+  await assert.rejects(service(open()).decide(decision(attention)), { code: "already_decided" });
+
+  const denied = await approval.inspect(taskRequest("task_deny").id);
+  assert.equal((await approval.decide(decision(denied, "deny"))).state, "denied");
+  const stale = await approval.inspect(taskRequest("task_stale").id);
+  scope = "b".repeat(64);
+  await assert.rejects(approval.decide(decision(stale)), { code: "invalidated" });
+  grants[0].actionKinds.pop();
+  assert.equal((await approval.inspect(taskRequest("no_task_grant").id)).state, "refused");
+  assert.deepEqual(delegated, [{ requestId: allowed.id, fingerprint: "a".repeat(64) }]);
   assert.deepEqual(calls, []);
 });
 

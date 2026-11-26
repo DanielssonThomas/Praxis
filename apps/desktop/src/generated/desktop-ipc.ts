@@ -18,7 +18,7 @@ export const commands = {
 	unlockOverview: (token: string, options?: InvokeOptions) => typedError<OverviewProjection_Serialize, WorkflowError>(__TAURI_INVOKE("unlock_overview", { token }, options)),
 	lockOverview: (options?: InvokeOptions) => __TAURI_INVOKE<void>("lock_overview", undefined, options),
 	readOverview: (request: OverviewPageRequest | null, options?: InvokeOptions) => typedError<OverviewProjection_Serialize, WorkflowError>(__TAURI_INVOKE("read_overview", { request }, options)),
-	controlSession: (request: SessionControlRequest, options?: InvokeOptions) => typedError<SessionControl, WorkflowError>(__TAURI_INVOKE("control_session", { request }, options)),
+	controlSession: (request: SessionControlRequest, options?: InvokeOptions) => typedError<SessionControl_Serialize, WorkflowError>(__TAURI_INVOKE("control_session", { request }, options)),
 	unlockActivity: (token: string, options?: InvokeOptions) => typedError<ActivityCard[], WorkflowError>(__TAURI_INVOKE("unlock_activity", { token }, options)),
 	lockActivity: (options?: InvokeOptions) => __TAURI_INVOKE<void>("lock_activity", undefined, options),
 	readActivity: (options?: InvokeOptions) => typedError<ActivityCard[], WorkflowError>(__TAURI_INVOKE("read_activity", undefined, options)),
@@ -255,7 +255,8 @@ export type OverviewPane_Deserialize = {
 	ticket: string,
 	highlighted: boolean,
 	runtime: OverviewRuntime_Deserialize,
-	control: SessionControl,
+	worker?: OverviewWorker | null,
+	control: SessionControl_Deserialize,
 	usageNotice?: string | null,
 };
 
@@ -265,7 +266,8 @@ export type OverviewPane_Serialize = {
 	ticket: string,
 	highlighted: boolean,
 	runtime: OverviewRuntime_Serialize,
-	control: SessionControl,
+	worker?: OverviewWorker,
+	control: SessionControl_Serialize,
 	usageNotice: string | null,
 };
 
@@ -288,6 +290,8 @@ export type OverviewRuntime = OverviewRuntime_Serialize | OverviewRuntime_Deseri
 export type OverviewRuntime_Deserialize = { availability: "available"; snapshot: SessionSnapshot; usage: UsageMeasurement_Deserialize } | { availability: "unavailable"; reason: string };
 
 export type OverviewRuntime_Serialize = { availability: "available"; snapshot: SessionSnapshot; usage: UsageMeasurement_Serialize } | { availability: "unavailable"; reason: string };
+
+export type OverviewWorker = { runtime: "codex"; runId: string };
 
 export type PolicyPreferences = {
 	axiomEnabled: boolean,
@@ -411,17 +415,29 @@ export type ReportUnlock = {
 
 export type ResourceKind = "task" | "session";
 
-export type SessionControl = {
+export type SessionControl = SessionControl_Serialize | SessionControl_Deserialize;
+
+export type SessionControlMode = "read_only" | "manual" | "automated_write";
+
+export type SessionControlRequest = { operation: "takeover"; sessionId: string } | { operation: "guide"; sessionId: string; text: string } | { operation: "return"; sessionId: string };
+
+export type SessionControl_Deserialize = {
 	mode: SessionControlMode,
 	canTakeover: boolean,
 	canGuide: boolean,
 	canReturn: boolean,
 	guidance: GuidanceReceipt,
+	unavailableReason?: string | null,
 };
 
-export type SessionControlMode = "read_only" | "manual" | "automated_write";
-
-export type SessionControlRequest = { operation: "takeover"; sessionId: string } | { operation: "guide"; sessionId: string; text: string } | { operation: "return"; sessionId: string };
+export type SessionControl_Serialize = {
+	mode: SessionControlMode,
+	canTakeover: boolean,
+	canGuide: boolean,
+	canReturn: boolean,
+	guidance: GuidanceReceipt,
+	unavailableReason?: string,
+};
 
 export type SessionOutput = { availability: "available"; text: string; truncated: boolean } | { availability: "unavailable"; reason: string };
 

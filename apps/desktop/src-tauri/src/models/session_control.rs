@@ -22,6 +22,8 @@ pub(crate) struct SessionControl {
     can_guide: bool,
     can_return: bool,
     guidance: GuidanceReceipt,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    unavailable_reason: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Type)]

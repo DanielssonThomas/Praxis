@@ -1,10 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { ApprovalError } from "@praxis/approvals";
 import { approvalRoutesFromEnv } from "@praxis/approvals/http";
 import { kanbanRoutesFromEnv } from "@praxis/kanban/http";
 import { settingsPath } from "@praxis/settings";
 import { serveSettings } from "@praxis/settings/http";
+import { CodexDelegationError, codexDelegationFromEnv } from "./codex-delegation.js";
 import { managerForegroundFromEnv } from "./manager-foreground.js";
 import { overviewRoutesFromEnv } from "./overview-server.js";
 import { reportsRoutesFromEnv } from "./reports-server.js";
@@ -16,9 +18,22 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) {
 }
 
 const config = settingsPath();
-const activity = await approvalRoutesFromEnv();
+const codex = await codexDelegationFromEnv();
+const activity = await approvalRoutesFromEnv(codex && {
+  preview: (request) => codex.preview(request),
+  async execute(request, scopeDigest) {
+    try {
+      return await codex.execute(request, scopeDigest);
+    } catch (error) {
+      if (error instanceof CodexDelegationError && error.code === "invalidated") {
+        throw new ApprovalError("invalidated", error.message);
+      }
+      throw error;
+    }
+  },
+});
 const kanban = await kanbanRoutesFromEnv();
-const overview = await overviewRoutesFromEnv(activity?.list);
+const overview = await overviewRoutesFromEnv(activity?.list, codex && (() => codex.list()));
 const managerForeground = await managerForegroundFromEnv(config, overview?.readManagerResources);
 const reports = await reportsRoutesFromEnv(config);
 const assets = new Map([
@@ -93,6 +108,7 @@ server.once("close", () => {
   void activity?.close();
   kanban?.close();
   overview?.close();
+  codex?.close();
   reports?.close();
 });
 server.listen(port, "127.0.0.1", () => {

@@ -43,6 +43,7 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
   const { CuratedSkills } = await import("@praxis/mcp");
   const { loadSkillValidator } = await import("../../packages/mcp/dist/skills-axiom.js");
   const root = await mkdtemp(join(tmpdir(), "praxis-codex-live-"));
+  const outsideFile = join(root, "outside-worker-write.txt");
   const source = process.env.PRAXIS_AXIOM_ROOT;
   const core = (await readFile(join(source, "core/AXIOMS.md"), "utf8")).trimEnd();
   const cancelled = Promise.withResolvers();
@@ -104,6 +105,8 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
           assert.ok(body.tools?.some(({ name }) => name === "exec"), "The native worker must advertise Code Mode exec.");
           const id = "response-workspace-read";
           const item = { type: "custom_tool_call", call_id: readCall, name: "exec", input: `
+            const outside = await tools.exec_command({ cmd: ${JSON.stringify(`touch -- ${JSON.stringify(outsideFile)}`)} });
+            if (outside.exit_code === 0) throw new Error("Native workspace-only mode allowed a write outside the staged workspace.");
             const result = await tools.exec_command({ cmd: "cat -- fixture.txt" });
             if (result.exit_code !== 0) throw new Error("Workspace read failed.");
             text(result.output);
@@ -125,6 +128,8 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
         return;
       }
       const textItems = Array.isArray(toolResult.output) ? toolResult.output.map(({ text }) => text) : [toolResult.output];
+      assert.ok(!JSON.stringify(textItems).includes("allowed a write outside the staged workspace"),
+        "Native workspace-only mode allowed a write outside the staged workspace.");
       const fixtureLine = textItems.find((text) => text === marker || text === fixture);
       assert.ok(textItems.some((text) => text === published.markdown || text === published.markdown.trimEnd()),
         "Native Code Mode must read the published SKILL.md exactly.");
@@ -162,6 +167,7 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
   });
   const codex = new CodexExecutor({
     program: process.env.PRAXIS_CODEX_BIN, axiomRoot: source, root, model: "gpt-5.4",
+    workspaceOnly: true,
     selectedSkills: async ({ task }) => task.id === selectedTask.id ? [published] : [],
     prepareProfile: async ({ codexHome, userHome, task }) => {
       if (task.id === selectedTask.id) nativeSkillPath = join(userHome, ".agents", "skills", skillId, "SKILL.md");
@@ -174,6 +180,9 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
       ].join("\n"));
     },
     prepareWorkspace: ({ workspace }) => writeFile(join(workspace, "fixture.txt"), fixture),
+    authorizeLaunch: async ({ task }) => {
+      if (task.id === "task_denied_at_start") throw new Error("The fixture approval became stale after staging.");
+    },
   });
   const host = await codex.capabilities();
   assert.deepEqual(host.host, { runtime: "codex", version: "0.172.0-alpha.2", os: "linux", architecture: "x64", surface: "cli" });
@@ -184,6 +193,7 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
   const unrelated = requestFor("unrelated");
   unrelated.brief.id = "task_different";
   await assert.rejects(codex.createAssignment(unrelated), { code: "invalid_input" });
+  await assert.rejects(codex.createAssignment(requestFor("denied_at_start")), { code: "unavailable" });
   const attempts = await Promise.all([codex.createAssignment(requestFor("complete")), codex.createAssignment(requestFor("cancel"))]);
   const [complete, stop] = attempts;
 
@@ -218,6 +228,7 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
   assert.equal(stopped.snapshot.status, "stopped");
   assert.equal(stopped.usage.metering, "unknown");
   assert.deepEqual(deliveries.sort(), ["task_cancel", "task_complete"]);
+  await assert.rejects(readFile(outsideFile), { code: "ENOENT" });
   const paths = attempts.map((assignment) => codex.workspaceFor(assignment));
   assert.notEqual(paths[0], paths[1]);
   for (const workspace of paths) {

@@ -7,6 +7,7 @@ import { mcpAuthoritySchema } from "@praxis/mcp";
 import { OperationalStore } from "@praxis/state";
 import { z } from "zod";
 import { ApprovalError, ApprovalService } from "./index.js";
+import type { TaskDelegation } from "./index.js";
 
 const inspectInput = z.strictObject({ requestId: eventIdSchema });
 const route = "/api/activity";
@@ -56,7 +57,7 @@ export function localOperatorGuard(digest: string) {
   };
 }
 
-export async function approvalRoutesFromEnv() {
+export async function approvalRoutesFromEnv(taskDelegation?: TaskDelegation) {
   const digest = process.env.PRAXIS_OPERATOR_TOKEN_DIGEST;
   const authorityFile = process.env.PRAXIS_MCP_CONFIG_FILE;
   const origin = process.env.PRAXIS_HERMES_ORIGIN;
@@ -78,7 +79,7 @@ export async function approvalRoutesFromEnv() {
     }
     return config.grants;
   };
-  const service = new ApprovalService({ store, runtime, loadGrants });
+  const service = new ApprovalService({ store, runtime, loadGrants, taskDelegation });
   let advance: Promise<void> | undefined;
   const routineTimer = setInterval(() => {
     advance ??= service.advanceRoutine().catch(() => {

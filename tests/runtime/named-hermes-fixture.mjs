@@ -13,7 +13,8 @@ import { providerFixture, stopProcess, until } from "./hermes-fixture.mjs";
 const run = promisify(execFile);
 const pinned = "caafe5389ae585ef77387a962aee05b1bcf17029";
 
-export async function startNamedHermesFixture(t, profile, respond) {
+export async function startNamedHermesFixture(t, profile, respond, { mcpOrigin, mcpToken } = {}) {
+  assert.equal(Boolean(mcpOrigin), Boolean(mcpToken), "Supply both named fixture MCP settings.");
   const executable = process.env.PRAXIS_HERMES_BIN;
   assert.ok(executable, "Set PRAXIS_HERMES_BIN to the pinned Hermes source installation.");
   const home = await mkdtemp(join(tmpdir(), "praxis-named-fixture-"));
@@ -46,11 +47,17 @@ export async function startNamedHermesFixture(t, profile, respond) {
   const profileHome = join(env.HERMES_HOME, "profiles", profile);
   const apiKey = randomUUID();
   provider = await providerFixture(respond);
-  await writeFile(join(profileHome, ".env"), `API_SERVER_KEY=${apiKey}\n`, { mode: 0o600 });
+  const credential = mcpToken ? `PRAXIS_MCP_TOKEN=${mcpToken}\n` : "";
+  await writeFile(join(profileHome, ".env"), `API_SERVER_KEY=${apiKey}\n${credential}`, { mode: 0o600 });
   await writeFile(join(profileHome, "config.yaml"), [
     "model:", "  provider: custom", `  base_url: "${provider.origin}"`, "  default: fake-model",
     "  api_key: fixture-only", "  context_length: 128000", "tools:", "  connectors:", "    enabled: false",
-    "kanban:", "  dispatch_in_gateway: false", "",
+    "kanban:", "  dispatch_in_gateway: false",
+    ...(mcpOrigin ? [
+      "mcp_servers:", "  praxis:", "    url: " + JSON.stringify(mcpOrigin), "    headers:",
+      '      Authorization: "Bearer ${PRAXIS_MCP_TOKEN}"', "    trust: full",
+    ] : []),
+    "",
   ].join("\n"), { mode: 0o600 });
 
   const reservation = createServer().listen(0, "127.0.0.1");
