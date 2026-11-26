@@ -1,0 +1,11 @@
+<div class="board" aria-label="Native Hermes board">
+  @for (column of columns(); track column.status) {
+    <section class="column" [attr.data-status]="column.status" [attr.aria-label]="column.status.replaceAll('_', ' ')">
+      <h2>{{ column.status.replaceAll('_', ' ') }}</h2>
+      @for (task of column.tasks; track task.nativeId) {
+        <praxis-kanban-card [task]="task" [canLink]="canLink() && task.status !== 'archived'" [busy]="busy()"
+          (linkIssue)="linkIssue.emit($event)" (openIssue)="openIssue.emit($event)" (invalidIssue)="invalidIssue.emit()" />
+      }
+    </section>
+  }
+</div>
