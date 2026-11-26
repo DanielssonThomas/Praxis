@@ -1,0 +1,16 @@
+<footer>
+  <form aria-label="Command bar" autocomplete="off" (submit)="submit($event)">
+    <div class="feedback" role="status">{{ feedback() }}</div>
+    <div class="command-row">
+      <input
+        name="command"
+        aria-label="Command"
+        placeholder="Type /help"
+        autocapitalize="none"
+        spellcheck="false"
+        [formControl]="command()"
+      >
+      <button praxisButton type="submit">Run</button>
+    </div>
+  </form>
+</footer>

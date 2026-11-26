@@ -1,0 +1,30 @@
+:root {
+  color-scheme: light dark;
+  font: 16px/1.5 system-ui, sans-serif;
+  --surface: light-dark(#f7f8fb, #151a23);
+  --panel: light-dark(#ffffff, #202734);
+  --text: light-dark(#1e2939, #f0f3f9);
+  --muted: light-dark(#4d5a6d, #b3bdcc);
+  --border: light-dark(#ced5e0, #47556a);
+  --accent: light-dark(#274fc8, #9cb2ff);
+  --accent-soft: light-dark(#e8edff, #2e405f);
+  --button-text: light-dark(#ffffff, #172145);
+  --shell-gutter: clamp(0.75rem, 4vw, 2.25rem);
+  background: var(--surface);
+  color: var(--text);
+}
+
+body { margin: 0; }
+
+[hidden] { display: none !important; }
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.45rem, 4vw, 2.1rem);
+  letter-spacing: -0.03em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
