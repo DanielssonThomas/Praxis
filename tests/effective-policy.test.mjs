@@ -31,7 +31,8 @@ const observation = {
 async function fixture(t) {
   const directory = await mkdtemp(join(tmpdir(), "praxis-effective-policy-"));
   const root = join(directory, "source");
-  await mkdir(root);
+  const workerRoot = join(directory, "worker");
+  await Promise.all([mkdir(root), mkdir(workerRoot)]);
   const store = new OperationalStore(join(directory, "store.sqlite"));
   t.after(async () => {
     store.close();
@@ -42,7 +43,8 @@ async function fixture(t) {
   const input = {
     grants: [{ principalId: manager, tokenDigest: "a".repeat(64), taskIds: [task.id], sessions: [], actionKinds: ["task.delegate"] }],
     authority: { revision: 1, root, brief, requirements, protectedPaths: ["checks"], verificationHost: host, reviewerId: operator },
-    sourceDigest: digest("integrated"), outsideScopeDigest: digest("outside"), outcome: "passed",
+    sourceDigest: digest("integrated"), workerSourceDigest: digest("integrated"),
+    outsideScopeDigest: digest("outside"), outcome: "passed",
   };
   function intent(suffix, actorId = manager) {
     const id = `event_request_${suffix}`;
@@ -56,7 +58,9 @@ async function fixture(t) {
     parseBrief: structuredClone,
     parseHost: structuredClone,
     policy: () => policy,
-    snapshot: async ({ excludedPaths }) => ({ digest: excludedPaths ? input.outsideScopeDigest : input.sourceDigest }),
+    snapshot: async ({ root: sourceRoot, excludedPaths }) => ({
+      digest: excludedPaths ? input.outsideScopeDigest : sourceRoot === workerRoot ? input.workerSourceDigest : input.sourceDigest,
+    }),
     plan: async ({ root, task, requirements }) => ({ root, task, requirements, checks: [{
       id: "check", criterionId: "tests", kind: "automated", required: true, timeoutMs: 30_000,
       invocation: { executable: "npm", args: ["run", "test"], cwd: root }, sources: [{ path: "package.json", digest: digest("manifest") }],
@@ -74,8 +78,8 @@ async function fixture(t) {
   const service = new management.EffectivePolicyService({
     store, loadGrants: async () => input.grants, loadAuthority: async () => input.authority,
   }, axiom);
-  const admit = async (requestId) => service.admit(requestId, session.id, (await service.preview(requestId, session.id)).fingerprint);
-  return { service, input, store, intent, admit };
+  const admit = async (requestId, sessionId = session.id) => service.admit(requestId, sessionId, (await service.preview(requestId, sessionId)).fingerprint);
+  return { service, input, store, intent, admit, workerRoot };
 }
 
 test("admission binds an authenticated delegation intent to the exact canonical task and brief once", async (t) => {
@@ -94,31 +98,60 @@ test("admission binds an authenticated delegation intent to the exact canonical 
   await assert.rejects(service.preview(intent("worker", "principal_ungranted_worker"), session.id), { code: "forbidden" });
 });
 
+test("separate delegation requests cannot race past the durable admission limits", async (t) => {
+  const { intent, store, admit } = await fixture(t);
+  const alternate = { ...session, id: "session_alternate" };
+  store.recordSession(alternate);
+  const attempts = await Promise.allSettled([
+    admit(intent("first")), admit(intent("duplicate_session")), admit(intent("other_session"), alternate.id),
+  ]);
+  assert.equal(attempts.filter(({ status }) => status === "fulfilled").length, 1);
+  assert.deepEqual(attempts.flatMap((attempt) => attempt.status === "rejected" ? [attempt.reason.code] : []).sort(), ["limit", "limit"]);
+  assert.equal(store.eventsOfKind("task.delegation_admitted").length, 1);
+});
+
 test("the original authority version protects mandatory checks and external requirements", async (t) => {
   const { service, input, intent, store, admit } = await fixture(t);
+  const scopedBrief = { ...brief, limits: { ...brief.limits, maxAttempts: 2, maxConcurrency: 2 } };
+  const second = { ...session, id: "session_policy_second" };
+  store.recordSession(second);
+  input.authority = { ...input.authority, brief: scopedBrief };
   const { admissionId } = await admit(intent("original"));
-  input.authority = { ...input.authority, brief: { ...brief, criteria: [{ ...brief.criteria[0], required: false }] } };
+  input.authority = { ...input.authority, brief: { ...scopedBrief, criteria: [{ ...brief.criteria[0], required: false }] } };
   await assert.rejects(admit(intent("unversioned")), { code: "authority_conflict" });
   input.authority = { ...input.authority, revision: 2, brief: { ...brief, ownedPaths: ["checks"] } };
   await assert.rejects(admit(intent("grader")), { code: "forbidden" });
   input.authority = { ...input.authority, brief: { ...brief, ownedPaths: ["package.json"] } };
   await assert.rejects(admit(intent("manifest")), { code: "forbidden" });
-  input.authority = { ...input.authority, brief };
-  await admit(intent("new_version"));
+  input.authority = { ...input.authority, brief: scopedBrief };
+  await admit(intent("new_version"), second.id);
   await assert.rejects(service.verify(admissionId), { code: "stale" });
   assert.equal(store.eventsOfKind("task.delegation_admitted").length, 2);
 });
 
 test("completion requires the same reviewed source, the settled result, and fresh passing mandatory evidence", async (t) => {
-  const { service, input, intent, store, admit } = await fixture(t);
-  const { admissionId } = await admit(intent("completed"));
-  await assert.rejects(service.inspectIntegration({ admissionId, assignment, observation }), { code: "invalid_input" });
+  const { service, input, intent, store, admit, workerRoot } = await fixture(t);
+  const requestId = intent("completed");
+  const { admissionId } = await admit(requestId);
+  const integration = { admissionId, assignment, observation, workerRoot };
+  await assert.rejects(service.inspectIntegration(integration), { code: "invalid_input" });
+  await assert.rejects(service.recordLaunch(admissionId, assignment), { code: "invalid_input" });
+  input.workerSourceDigest = digest("different base workspace");
+  await assert.rejects(service.verifyStaging(admissionId, workerRoot), { code: "stale" });
+  input.workerSourceDigest = input.sourceDigest;
+  await service.verifyStaging(admissionId, workerRoot);
   assert.equal(await service.recordLaunch(admissionId, assignment), "inserted");
   assert.equal(await service.recordLaunch(admissionId, assignment), "duplicate");
   await assert.rejects(service.recordLaunch(admissionId, { ...assignment, runId: "worker_other" }), { code: "authority_conflict" });
+  assert.equal(await service.recordSettlement(admissionId, assignment, observation), "inserted");
+  assert.equal(service.readAdmission(requestId).assignment.runId, assignment.runId);
+  assert.equal(service.readAdmission(requestId).settlement.status, "completed");
   const verification = await service.verify(admissionId);
-  const reviewed = await service.inspectIntegration({ admissionId, assignment, observation });
-  const request = { admissionId, assignment, observation, review: {
+  input.workerSourceDigest = digest("different native result");
+  await assert.rejects(service.inspectIntegration(integration), { code: "stale" });
+  input.workerSourceDigest = input.sourceDigest;
+  const reviewed = await service.inspectIntegration(integration);
+  const request = { ...integration, review: {
     reviewerId: operator, sourceDigest: reviewed.source.digest, receiptDigest: reviewed.receiptDigest,
   }, verification };
   await assert.rejects(service.complete({ ...request, review: { ...request.review, reviewerId: manager } }), { code: "forbidden" });
