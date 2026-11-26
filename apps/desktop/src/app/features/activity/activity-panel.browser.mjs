@@ -34,8 +34,9 @@ function installActivityFixture() {
           if (card?.phase.state !== "attention" || card.phase.approval.id !== request.approvalId) {
             throw { code: "conflict", message: "This approval no longer matches the reviewed action." };
           }
+          const status = card.action.kind === "task.delegate" ? "running" : "stopping";
           card.phase = request.decision === "deny" ? { state: "denied" }
-            : { state: "resolved", native: { status: "stopping" } };
+            : { state: "resolved", native: { status } };
           return structuredClone(card);
         }
         default:
@@ -85,6 +86,22 @@ async function assertFocus(locator) {
 async function openActivity(t, viewport, observation) {
   return open(t, viewport, observation, "#/manager", { initialize: installActivityFixture });
 }
+
+test("Activity identifies delegated Codex work in review and after approval", async (t) => {
+  const page = await openActivity(t, { width: 1120, height: 760 }, "activity-codex-delegation");
+  const card = { ...pending(), action: { kind: "task.delegate", target: { kind: "task", id: "task_fixture_codex" } } };
+  await setFeed(page, card);
+  await unlock(page);
+  const review = inbox(page).getByRole("button", { name: "Review", exact: true });
+  await review.waitFor();
+  assert.equal(await inbox(page).getByText("Delegate task to Codex", { exact: true }).count(), 1);
+  await review.click();
+  const dialog = page.getByRole("dialog", { name: "Review request", exact: true });
+  await dialog.getByText(card.action.target.id, { exact: true }).waitFor();
+  await dialog.getByRole("button", { name: "Approve once" }).click();
+  await dialog.getByText("Codex reported the run as running.", { exact: true }).waitFor();
+  assert.deepEqual(await decisions(page), [{ requestId, approvalId, decision: "approve" }]);
+});
 
 test("closed Activity announces newly pending approvals across routes and clears them on lock", async (t) => {
   const page = await openActivity(t, { width: 360, height: 620 }, "activity-closed-feed-360");

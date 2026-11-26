@@ -105,6 +105,29 @@ async function assertNoHorizontalOverflow(page) {
   }), true, "Overview and its workspace fit horizontally");
 }
 
+test("a Codex Overview pane displays its own native identity and unavailable controls", async (t) => {
+  const fixture = projection(1);
+  const runId = "codex_fixture_native_run";
+  const reason = "Codex does not support takeover, guidance, or handback.";
+  Object.assign(fixture.panes[0], {
+    worker: { runtime: "codex", runId },
+    control: { ...readOnly, unavailableReason: reason },
+  });
+  const page = await openOverview(t, { width: 1120, height: 760 }, "overview-codex-worker", 1, { 1: fixture });
+  const pane = workers(page).first();
+  await pane.waitFor();
+  assert.equal(await pane.getAttribute("data-worker-runtime"), "codex");
+  assert.equal(await pane.getAttribute("data-session-id"), fixture.panes[0].session.id);
+  assert.equal(await pane.locator("[data-status]").textContent(), "Running");
+  assert.equal(await pane.getByLabel("Session output").textContent(), longOutput);
+  await pane.getByRole("button", { name: /^Expand/ }).press("Enter");
+  for (const text of ["Runtime", "Codex", "Native run", runId, "Input tokens", "32,410"]) {
+    await pane.getByText(text, { exact: true }).waitFor();
+  }
+  assert.equal(await pane.locator("[data-control-unavailable]").textContent(), reason);
+  assert.equal(await pane.getByRole("button", { name: /take over|send guidance|return control/i }).count(), 0);
+});
+
 test("desktop gives one loaded worker prominence and preserves its focused session controls", async (t) => {
   const page = await openOverview(t, { width: 1280, height: 800 }, "overview-desktop", 4);
   const panes = workers(page);
