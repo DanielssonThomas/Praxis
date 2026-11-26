@@ -119,6 +119,7 @@ test("packaged Manager reconnects real named Hermes output and Overview restores
     assert.equal((await desktop.handles()).length, 1);
     await desktop.waitForText("h1", "Manager");
     await desktop.waitForText("praxis-host-launch [role=status]", "Local Praxis host ready.");
+    assert.equal(await desktop.execute("return getComputedStyle(document.querySelector('praxis-shell')).display"), "grid");
   };
   const command = async (value) => {
     const field = await desktop.element('input[aria-label="Command"]');

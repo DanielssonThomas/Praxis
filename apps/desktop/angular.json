@@ -18,7 +18,10 @@
             "styles": ["src/styles.css"]
           },
           "configurations": {
-            "production": { "outputHashing": "all" },
+            "production": {
+              "outputHashing": "all",
+              "optimization": { "styles": { "inlineCritical": false } }
+            },
             "development": { "optimization": false, "sourceMap": true }
           },
           "defaultConfiguration": "production"

@@ -76,3 +76,5 @@ Open **Manager** and enter the local operator credential. Text in the permanent 
 **Overview** reads registered worker sessions using its own operator unlock. Worker output and usage come from the existing host projection, including unavailable usage and truncated replay markers. The native bridge retains each verified operator credential in memory until that view is locked or Praxis closes.
 
 Run `npm run test:desktop:manager` with the same package and display setup as the native lifecycle smoke. The driver starts a disposable, pinned named Hermes profile with a scripted local provider, observes Manager and Overview in the bundled window, and verifies both views across reopen.
+
+The production Angular bundle loads its stylesheet as a local asset. Tauri supplies the style nonce that Angular uses for component styles in the packaged window.
