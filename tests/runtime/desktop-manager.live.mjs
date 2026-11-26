@@ -13,6 +13,7 @@ import { startNamedHermesFixture } from "./named-hermes-fixture.mjs";
 
 const longTail = "Bounded output from an earlier native worker.";
 const workerText = "The independent native worker is still running.";
+const pagedWorkerText = "The eleventh worker completed on the second Overview page.";
 const reply = "The named manager identified the scoped task.";
 const firstPrompt = "Show the scoped work.";
 const secondPrompt = "Respect the saved presentation preference.";
@@ -46,10 +47,13 @@ test("packaged Manager reconnects real named Hermes output and Overview restores
   const workers = [
     task("desktop_worker", "Desktop fixture worker"),
     task("desktop_completed", "Completed fixture worker"),
+    ...Array.from({ length: 8 }, (_, index) => task("desktop_filler_" + index, "Registered paging fixture " + index)),
+    task("desktop_page_two", "Second-page fixture worker"),
   ].map((task) => ({
     task,
     session: { schemaVersion: 1, taskId: task.id, id: task.id.replace("task_", "session_") },
   }));
+  const pagedWorker = workers.at(-1);
   const foreign = task("outside_grant", "Private fixture task outside the manager grant");
   store.recordTask(foreign);
   for (const { task, session } of workers) {
@@ -71,6 +75,9 @@ test("packaged Manager reconnects real named Hermes output and Overview restores
       const lines = Array.from({ length: 500 }, (_, index) => `Native fixture output line ${index} with its own sequence.\n`);
       return { message: { role: "assistant", content: lines.join("") + longTail } };
     }
+    if (prompt === pagedWorker.task.title) {
+      return { message: { role: "assistant", content: pagedWorkerText } };
+    }
     if (prompt === firstPrompt) {
       managerCalls++;
       return { message: { role: "assistant", content: `${reply}\n\n${footer}` }, holdAfterMessage: managerHold };
@@ -83,8 +90,14 @@ test("packaged Manager reconnects real named Hermes output and Overview restores
     assert.ok(!["failed", "interrupted", "stopped", "unknown"].includes(status), `Fixture worker reported ${status}.`);
     return status === "completed";
   }, "Completed worker never settled.");
+  const last = await runtime.createAssignment(pagedWorker.session, pagedWorker.task.title);
+  await until(async () => (await runtime.inspectAssignment(last)).status === "completed", "Second-page worker never settled.");
   const active = await runtime.createAssignment(workers[0].session, workers[0].task.title);
-  const assignments = [active, completed];
+  // These disposable bindings occupy the rest of page one and have no backing Hermes run.
+  const fillers = workers.slice(2, -1).map(({ task, session }, index) => ({
+    schemaVersion: 1, taskId: task.id, sessionId: session.id, runId: "run_overview_fixture_" + index,
+  }));
+  const assignments = [active, completed, ...fillers, last];
   await until(async () => (await runtime.inspectAssignment(active)).status === "running", "Active worker never started.");
 
   const principalId = "principal_desktop_manager";
@@ -165,6 +178,45 @@ test("packaged Manager reconnects real named Hermes output and Overview restores
   if (motion.reduced) assert.equal(motion.animation, "none");
   else assert.match(motion.animation, /overview-enter$/);
   if (evidence) await desktop.screenshot(join(evidence, "overview-live-workers.png"));
+
+  const pager = 'nav[aria-label="Overview pages"]';
+  const position = `${pager} [aria-live]`;
+  const previous = `${pager} [data-page-step="previous"]`;
+  const next = `${pager} [data-page-step="next"]`;
+  const disabled = (selector) => desktop.execute(
+    "return document.querySelector(arguments[0]).getAttribute('aria-disabled') === 'true';", selector,
+  );
+  const displayedSessions = () => desktop.execute(
+    "return Array.from(document.querySelectorAll('.session-pane'), pane => pane.dataset.sessionId);",
+  );
+  const keyboardStep = async (selector) => {
+    await desktop.execute("document.querySelector(arguments[0]).focus();", selector);
+    await (await desktop.element(selector)).type(enter);
+  };
+  await desktop.waitForText(position, "Page 1 of 2");
+  assert.deepEqual(await displayedSessions(), workers.slice(0, 10).map(({ session }) => session.id));
+  assert.equal(await disabled(previous), true);
+  await desktop.resize(360, 620);
+  await eventually(() => desktop.execute("return innerWidth >= 360 && innerWidth <= 390;"), "Overview did not reflow to a narrow window.");
+  await keyboardStep(next);
+  await desktop.waitForText(position, "Page 2 of 2");
+  await eventually(() => containing(".session-pane", pagedWorkerText), "Second-page native output was not displayed.");
+  assert.deepEqual(await displayedSessions(), [pagedWorker.session.id]);
+  assert.equal(await disabled(next), true);
+  assert.equal(await desktop.execute("return document.activeElement.matches(arguments[0]);", next), true);
+  assert.equal(await desktop.execute(
+    "const main = document.querySelector('main'); return main.scrollWidth <= main.clientWidth;",
+  ), true);
+  assert.equal(await desktop.execute('return document.querySelectorAll(".session-pane button[aria-expanded=true]").length'), 0);
+  const viewport = await desktop.execute("return [innerWidth, innerHeight];");
+  if (evidence) await desktop.screenshot(join(evidence, "overview-page-two-webkit.png"));
+  await keyboardStep(previous);
+  await desktop.waitForText(position, "Page 1 of 2");
+  assert.deepEqual(await displayedSessions(), workers.slice(0, 10).map(({ session }) => session.id));
+  assert.equal(await disabled(previous), true);
+  assert.equal(await desktop.execute("return document.activeElement.matches(arguments[0]);", previous), true);
+  await desktop.resize(1120, 760);
+  t.diagnostic(`Native Overview reached worker 11 and returned with focus at ${viewport.join(" × ")} in WebKit (${desktop.capabilities.browserVersion}).`);
 
   await command("/m");
   await desktop.waitForText("#manager-lock", "Lock manager");

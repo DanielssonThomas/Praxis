@@ -18,7 +18,7 @@ export class DesktopBridge {
   readonly lockManager = commands.lockManager;
   readonly unlockOverview = commands.unlockOverview;
   readonly lockOverview = commands.lockOverview;
-  readonly readOverview = commands.readOverview;
+  readonly readOverview = (page?: number) => commands.readOverview(page === undefined ? null : { page });
   readonly controlSession = commands.controlSession;
   readonly unlockActivity = commands.unlockActivity;
   readonly lockActivity = commands.lockActivity;

@@ -8,7 +8,7 @@ const titles = [
   "Add catalog search filters", "Normalize warehouse API responses", "Cover checkout edge cases",
   "Review order export errors", "Document queue configuration", "Audit product filters",
   "Check keyboard navigation", "Cover empty search results", "Review checkout translations",
-  "Verify inventory import behavior",
+  "Verify inventory import behavior", "Check delayed sync events",
 ];
 const longOutput = Array.from({ length: 100 }, (_, index) =>
   "Checking search and pagination fixture " + (index + 1) + ".").join("\n")
@@ -42,18 +42,27 @@ function projection(count) {
   if (panes[2]) panes[2].runtime.snapshot.output.text = "";
   if (panes[3]) panes[3].runtime = { availability: "unavailable", reason: "Native worker is offline." };
   if (panes[4]) panes[4].runtime.snapshot.output = { availability: "unavailable", reason: "Native output buffer unavailable." };
-  return { panes, association: { available: true, reason: null } };
+  return { panes, page: { number: 1, count: 1 }, association: { available: true, reason: null } };
 }
 
-function installFixture({ initial, readOnly }) {
+function installFixture({ initial, readOnly, pages }) {
   window.isTauri = true;
-  window.overviewFixture = { projection: initial, controls: [] };
+  window.overviewFixture = { projection: initial, controls: [], pages, readPages: [] };
   window.__TAURI_INTERNALS__ = {
     async invoke(command, args) {
       const fixture = window.overviewFixture;
       switch (command) {
         case "host_status": return { stage: "ready", nodeVersion: "24.22.3" };
-        case "read_overview": return fixture.projection;
+        case "read_overview": {
+          const page = args?.request?.page ?? 1;
+          fixture.readPages.push(page);
+          const response = fixture.pages?.[page] ?? fixture.projection;
+          if (fixture.holdPage === page) {
+            fixture.holdPage = null;
+            await new Promise((resolve) => { fixture.releaseRead = resolve; });
+          }
+          return response;
+        }
         case "control_session": {
           const request = args.request;
           fixture.controls.push(request);
@@ -71,8 +80,8 @@ function installFixture({ initial, readOnly }) {
   };
 }
 
-async function openOverview(t, viewport, observation, count) {
-  const fixture = { initial: projection(count), readOnly };
+async function openOverview(t, viewport, observation, count, pages) {
+  const fixture = { initial: pages?.[1] ?? projection(count), readOnly, pages };
   const initialize = `(${installFixture})(${JSON.stringify(fixture)})`;
   const page = await open(t, viewport, observation, "#/overview", { initialize });
   page.setDefaultTimeout(3_000);
@@ -246,4 +255,45 @@ test("360-pixel Overview keeps panes, scoped controls and command bar operable",
   assert.ok(focused.y >= workspace.y && focused.y + focused.height <= workspace.y + workspace.height,
     "the keyboard-focused disclosure stays visible when a scrolled pane expands");
   await capture(page, "overview-narrow-tenth-expanded");
+});
+
+test("Overview pages keep the eleventh worker reachable and discard a late first-page poll", async (t) => {
+  const pageOne = { ...projection(10), page: { number: 1, count: 2 } };
+  const pageTwo = { ...projection(11), page: { number: 2, count: 2 }, panes: [projection(11).panes[10]] };
+  const page = await openOverview(t, { width: 360, height: 620 }, "overview-pages", 10, { 1: pageOne, 2: pageTwo });
+  const pager = page.getByRole("navigation", { name: "Overview pages" });
+  const previous = pager.getByRole("button", { name: "Previous", exact: true });
+  const next = pager.getByRole("button", { name: "Next", exact: true });
+  await pager.getByText("Page 1 of 2", { exact: true }).waitFor();
+  assert.equal(await previous.getAttribute("aria-disabled"), "true");
+  assert.equal(await next.getAttribute("aria-disabled"), "false");
+  assert.equal(await workers(page).count(), 10);
+  await workers(page).first().getByRole("button", { expanded: false }).press("Enter");
+  await workers(page).getByRole("button", { expanded: true }).waitFor();
+  await page.evaluate(() => { window.overviewFixture.holdPage = 1; });
+  await page.waitForFunction(() => typeof window.overviewFixture.releaseRead === "function");
+
+  await next.press("Enter");
+  await pager.getByText("Page 2 of 2", { exact: true }).waitFor();
+  const secondId = pageTwo.panes[0].session.id;
+  assert.deepEqual(await workers(page).evaluateAll((panes) => panes.map((pane) => pane.dataset.sessionId)), [secondId]);
+  assert.equal(await workers(page).getByRole("button", { expanded: true }).count(), 0);
+  assert.equal(await next.getAttribute("aria-disabled"), "true");
+  assert.equal(await next.evaluate((node) => node === document.activeElement), true);
+  await assertNoHorizontalOverflow(page);
+  await capture(page, "overview-page-two-narrow");
+
+  await page.evaluate(async () => {
+    window.overviewFixture.releaseRead();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  assert.equal(await workers(page).first().getAttribute("data-session-id"), secondId);
+  await next.press("Space");
+  assert.equal(await page.evaluate(() => window.overviewFixture.readPages.includes(3)), false);
+  await previous.press("Space");
+  await pager.getByText("Page 1 of 2", { exact: true }).waitFor();
+  assert.equal(await previous.getAttribute("aria-disabled"), "true");
+  assert.equal(await previous.evaluate((node) => node === document.activeElement), true);
+  assert.equal(await workers(page).count(), 10);
+  assert.equal(await workers(page).getByRole("button", { expanded: true }).count(), 0);
 });

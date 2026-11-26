@@ -7,7 +7,7 @@ import { localOperatorGuard, readOperatorJson } from "@praxis/approvals/http";
 import { principalIdSchema } from "@praxis/contracts";
 import type { RuntimeSessionSnapshot, Session, Task, Usage } from "@praxis/contracts";
 import { HermesRuntime, HermesRuntimeError } from "@praxis/hermes-runtime";
-import type { HermesOutputCursor } from "@praxis/hermes-runtime";
+import type { HermesAssignment, HermesOutputCursor } from "@praxis/hermes-runtime";
 import { mcpAuthoritySchema } from "@praxis/mcp";
 import type { McpGrant } from "@praxis/mcp";
 import { OperationalStore, OperationalStoreError } from "@praxis/state";
@@ -30,8 +30,12 @@ export interface OverviewPane {
 export interface OverviewProjection {
   panes: OverviewPane[];
   association: { available: true } | { available: false; reason: string };
+  page: { number: number; count: number };
 }
+const overviewPath = "/api/overview";
 const paneLimit = 10;
+const maximumPage = 0xffff_ffff;
+const invalidPage = "Supply a positive whole Overview page number.";
 const settledStatuses = new Set<RuntimeSessionSnapshot["status"]>(["completed", "failed", "stopped", "interrupted"]);
 interface OverviewOptions {
   store: OperationalStore;
@@ -58,34 +62,66 @@ function assignmentsFor(grants: McpGrant[]): ControlBinding[] {
   return [...registered.values()].filter(({ assignment }) => !conflicting.has(assignment.sessionId));
 }
 
+interface AssignmentObservation {
+  cursor?: HermesOutputCursor;
+  pending?: Promise<PaneRuntime>;
+}
+
+function isPageNumber(page: number): boolean {
+  return Number.isInteger(page) && page >= 1 && page <= maximumPage;
+}
+
+function readPage(query: string): number | undefined {
+  const params = new URLSearchParams(query);
+  if (params.size === 0) return 1;
+  const value = params.get("page");
+  if (params.size !== 1 || value === null || !/^[1-9][0-9]{0,9}$/.test(value)) return undefined;
+  const page = Number(value);
+  return isPageNumber(page) ? page : undefined;
+}
+
 export class OverviewService {
-  readonly #cursors = new Map<string, HermesOutputCursor>();
-  #pending?: Promise<OverviewProjection>;
+  readonly #observations = new Map<string, AssignmentObservation>();
+  readonly #pending = new Map<number, Promise<OverviewProjection>>();
   readonly #options: OverviewOptions;
 
   constructor(options: OverviewOptions) {
     this.#options = options;
   }
 
-  list(): Promise<OverviewProjection> {
-    this.#pending ??= this.#project().finally(() => { this.#pending = undefined; });
-    return this.#pending;
+  list(requestedPage = 1): Promise<OverviewProjection> {
+    if (!isPageNumber(requestedPage)) return Promise.reject(new RangeError(invalidPage));
+    const pending = this.#pending.get(requestedPage);
+    if (pending !== undefined) return pending;
+    const read = this.#project(requestedPage).finally(() => { this.#pending.delete(requestedPage); });
+    this.#pending.set(requestedPage, read);
+    return read;
   }
 
-  async #project(): Promise<OverviewProjection> {
-    const { store, runtime, loadGrants, loadActivity, managerPrincipal, controls } = this.#options;
+  async #project(requestedPage: number): Promise<OverviewProjection> {
+    const { store, loadGrants, loadActivity, managerPrincipal, controls } = this.#options;
     const grants = await loadGrants();
-    const registered = assignmentsFor(grants).flatMap((binding) => {
+    const eligible = assignmentsFor(grants).flatMap((binding) => {
       const { assignment } = binding;
       const session = store.getSession(assignment.sessionId);
       const task = store.getTask(assignment.taskId);
       return session !== undefined && task !== undefined && session.taskId === task.id
-        ? [{ binding, assignment, session, task }] : [];
-    }).slice(0, paneLimit);
-    const activeRuns = new Set(registered.map(({ assignment }) => assignment.runId));
-    for (const runId of this.#cursors.keys()) {
-      if (!activeRuns.has(runId)) this.#cursors.delete(runId);
+        ? [{ binding, assignment, session, task, key: JSON.stringify([task.id, session.id, assignment.runId]) }] : [];
+    });
+    const count = Math.max(1, Math.ceil(eligible.length / paneLimit));
+    const number = Math.min(requestedPage, count);
+    const offset = (number - 1) * paneLimit;
+    const page = { number, count };
+
+    const active = new Set(eligible.map(({ key }) => key));
+    for (const key of this.#observations.keys()) {
+      if (!active.has(key)) this.#observations.delete(key);
     }
+    const registered = eligible.slice(offset, offset + paneLimit).map((pane) => {
+      const observation = this.#observations.get(pane.key) ?? {};
+      this.#observations.set(pane.key, observation);
+      return { ...pane, observation };
+    });
 
     let association: OverviewProjection["association"] = { available: false, reason: "A manager activity principal is not configured." };
     let highlighted: Session["id"] | undefined;
@@ -105,23 +141,11 @@ export class OverviewService {
       }
     }
 
-    const panes = await Promise.all(registered.map(async ({ binding, assignment, session, task }): Promise<OverviewPane> => {
+    const panes = await Promise.all(registered.map(async ({ binding, assignment, session, task, observation }): Promise<OverviewPane> => {
       const links = store.eventsFor(task.id).flatMap(({ details }) => details?.type === "issue_link" ? [details.issue] : []);
       const issue = links.at(-1);
       const ticket = issue === undefined ? task.id : `${issue.repository}#${issue.number}`;
-      let observed: PaneRuntime;
-      try {
-        const live = await runtime.inspectLiveAssignment(assignment, this.#cursors.get(assignment.runId));
-        if (live.snapshot.taskId !== task.id || live.snapshot.sessionId !== session.id || live.usage.sessionId !== session.id) {
-          throw new HermesRuntimeError("assignment_mismatch", "The native Overview receipt identified another session.");
-        }
-        if (live.cursor === undefined) this.#cursors.delete(assignment.runId);
-        else this.#cursors.set(assignment.runId, live.cursor);
-        observed = { availability: "available", snapshot: live.snapshot, usage: live.usage };
-      } catch (error) {
-        const reason = error instanceof HermesRuntimeError ? error.message : "The native session is unavailable.";
-        observed = { availability: "unavailable", reason };
-      }
+      const observed = await this.#observe(assignment, observation);
       let usageNotice: string | undefined;
       if (observed.availability === "available" && observed.usage.metering === "reported"
         && settledStatuses.has(observed.snapshot.status)) {
@@ -138,7 +162,27 @@ export class OverviewService {
         control: controls.view(binding, observed.availability === "available" && observed.snapshot.status === "running"),
       };
     }));
-    return { panes, association };
+    return { panes, association, page };
+  }
+
+  #observe(assignment: HermesAssignment, observation: AssignmentObservation): Promise<PaneRuntime> {
+    observation.pending ??= this.#inspect(assignment, observation).finally(() => { observation.pending = undefined; });
+    return observation.pending;
+  }
+
+  async #inspect(assignment: HermesAssignment, observation: AssignmentObservation): Promise<PaneRuntime> {
+    try {
+      const live = await this.#options.runtime.inspectLiveAssignment(assignment, observation.cursor);
+      if (live.snapshot.taskId !== assignment.taskId || live.snapshot.sessionId !== assignment.sessionId
+        || live.usage.sessionId !== assignment.sessionId) {
+        throw new HermesRuntimeError("assignment_mismatch", "The native Overview receipt identified another session.");
+      }
+      observation.cursor = live.cursor;
+      return { availability: "available", snapshot: live.snapshot, usage: live.usage };
+    } catch (error) {
+      const reason = error instanceof HermesRuntimeError ? error.message : "The native session is unavailable.";
+      return { availability: "unavailable", reason };
+    }
   }
 }
 
@@ -177,8 +221,11 @@ export async function overviewRoutesFromEnv(loadActivity?: () => Promise<Approva
   const view = new OverviewService({ store, runtime, loadGrants, loadActivity, managerPrincipal, controls });
 
   async function serve(request: IncomingMessage, response: ServerResponse): Promise<boolean> {
-    const controlRoute = request.url === "/api/overview/control";
-    if (!controlRoute && request.url !== "/api/overview") return false;
+    const target = request.url ?? "";
+    const queryStart = target.indexOf("?");
+    const path = queryStart === -1 ? target : target.slice(0, queryStart);
+    const controlRoute = target === "/api/overview/control";
+    if (!controlRoute && path !== overviewPath) return false;
     const method = controlRoute ? "POST" : "GET";
     const denied = guard(request);
     if (denied !== undefined) send(response, denied.status, { error: denied.error });
@@ -187,8 +234,13 @@ export async function overviewRoutesFromEnv(loadActivity?: () => Promise<Approva
       send(response, 405, { error: "This Overview route does not support that method." });
     } else {
       try {
-        const result = controlRoute ? await controls.operate(await readOperatorJson(request)) : await view.list();
-        send(response, 200, result);
+        if (controlRoute) {
+          send(response, 200, await controls.operate(await readOperatorJson(request)));
+        } else {
+          const page = readPage(queryStart === -1 ? "" : target.slice(queryStart + 1));
+          if (page === undefined) send(response, 400, { code: "invalid_input", error: invalidPage });
+          else send(response, 200, await view.list(page));
+        }
       } catch (error) {
         if (error instanceof SessionControlError || error instanceof ApprovalError) {
           send(response, error instanceof SessionControlError ? error.status : 400, { error: error.message });
