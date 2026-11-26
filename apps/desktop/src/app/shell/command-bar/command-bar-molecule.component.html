@@ -1,16 +1,54 @@
 <footer>
-  <form aria-label="Command bar" autocomplete="off" (submit)="submit($event)">
+  <form aria-label="Command bar" autocomplete="off" (submit)="send(command().value, $event)">
     <div class="feedback" role="status">{{ feedback() }}</div>
+    @if (matches().length) {
+      <div class="suggestions">
+        <div class="suggestion-header">
+          <span id="command-suggestions-label">Command suggestions</span>
+          <span aria-hidden="true">↑↓ Choose · Enter Run</span>
+        </div>
+        <ul id="command-suggestions" role="listbox" aria-labelledby="command-suggestions-label">
+          @for (match of matches(); track match.id) {
+            <li #suggestion role="option" [id]="'command-' + match.id"
+              [attr.aria-selected]="active()?.id === match.id"
+              (mousedown)="$event.preventDefault()"
+              (click)="send('/' + match.id)">
+              <span class="spelling">/{{ match.id }}</span>
+              <span class="option-label">{{ match.label }}</span>
+              <span class="alias">/{{ match.short }}</span>
+            </li>
+          }
+        </ul>
+      </div>
+    }
     <div class="command-row">
-      <input
+      <span class="command-mark" aria-hidden="true">/</span>
+      <textarea
+        #field
         name="command"
+        rows="1"
         aria-label="Command"
-        placeholder="Type /help"
+        aria-autocomplete="list"
+        aria-describedby="command-instructions"
+        title="Enter to send · Shift+Enter for a line break"
+        [attr.aria-controls]="matches().length ? 'command-suggestions' : null"
+        [attr.aria-activedescendant]="activeId()"
+        [placeholder]="placeholder()"
         autocapitalize="none"
         spellcheck="false"
         [formControl]="command()"
-      >
-      <button praxisButton type="submit">Run</button>
+        (input)="updateSuggestions()"
+        (focus)="updateSuggestions()"
+        (blur)="closeSuggestions()"
+        (keydown)="onKeydown($event)"
+      ></textarea>
+      <button praxisButton class="send" type="submit" aria-label="Send" title="Send">
+        <span aria-hidden="true">↑</span>
+      </button>
     </div>
+    <p id="command-instructions">
+      Enter sends. Shift plus Enter inserts a line break. Type slash for commands.
+      Use the arrow keys to choose a suggestion and Escape to dismiss.
+    </p>
   </form>
 </footer>

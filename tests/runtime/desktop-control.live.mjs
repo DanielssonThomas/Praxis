@@ -148,7 +148,7 @@ test("the packaged operator denies, fences and approves exact real Hermes worker
     await desktop.waitForText("praxis-host-launch [role=status]", "Local Praxis host ready.");
   };
   const overview = async () => {
-    const command = await desktop.element('input[aria-label="Command"]');
+    const command = await desktop.element('[aria-label="Command"]');
     await command.click();
     await command.type("/o" + enter);
     await desktop.waitForText("h1", "Overview");
