@@ -74,39 +74,44 @@ async function fixture(t) {
   const service = new management.EffectivePolicyService({
     store, loadGrants: async () => input.grants, loadAuthority: async () => input.authority,
   }, axiom);
-  return { service, input, store, intent };
+  const admit = async (requestId) => service.admit(requestId, session.id, (await service.preview(requestId, session.id)).fingerprint);
+  return { service, input, store, intent, admit };
 }
 
 test("admission binds an authenticated delegation intent to the exact canonical task and brief once", async (t) => {
   const { service, intent, store } = await fixture(t);
   const requestId = intent("canonical");
-  const attempts = await Promise.all([service.admit(requestId, session.id), service.admit(requestId, session.id)]);
+  const preview = await service.preview(requestId, session.id);
+  assert.deepEqual(preview.request, { task, session, brief });
+  assert.equal(store.eventsOfKind("task.delegation_admitted").length, 0);
+  await assert.rejects(service.admit(requestId, session.id, digest("different approval")), { code: "stale" });
+  const attempts = await Promise.all(Array.from({ length: 2 }, () => service.admit(requestId, session.id, preview.fingerprint)));
   const [first, second] = attempts;
   assert.deepEqual(attempts.map(({ write }) => write).sort(), ["duplicate", "inserted"]);
   assert.equal(first.admissionId, second.admissionId);
   assert.deepEqual(first.request, { task, session, brief });
   assert.equal(store.eventsOfKind("task.delegation_admitted").length, 1);
-  await assert.rejects(service.admit(intent("worker", "principal_ungranted_worker"), session.id), { code: "forbidden" });
+  await assert.rejects(service.preview(intent("worker", "principal_ungranted_worker"), session.id), { code: "forbidden" });
 });
 
 test("the original authority version protects mandatory checks and external requirements", async (t) => {
-  const { service, input, intent, store } = await fixture(t);
-  const { admissionId } = await service.admit(intent("original"), session.id);
+  const { service, input, intent, store, admit } = await fixture(t);
+  const { admissionId } = await admit(intent("original"));
   input.authority = { ...input.authority, brief: { ...brief, criteria: [{ ...brief.criteria[0], required: false }] } };
-  await assert.rejects(service.admit(intent("unversioned"), session.id), { code: "authority_conflict" });
+  await assert.rejects(admit(intent("unversioned")), { code: "authority_conflict" });
   input.authority = { ...input.authority, revision: 2, brief: { ...brief, ownedPaths: ["checks"] } };
-  await assert.rejects(service.admit(intent("grader"), session.id), { code: "forbidden" });
+  await assert.rejects(admit(intent("grader")), { code: "forbidden" });
   input.authority = { ...input.authority, brief: { ...brief, ownedPaths: ["package.json"] } };
-  await assert.rejects(service.admit(intent("manifest"), session.id), { code: "forbidden" });
+  await assert.rejects(admit(intent("manifest")), { code: "forbidden" });
   input.authority = { ...input.authority, brief };
-  await service.admit(intent("new_version"), session.id);
+  await admit(intent("new_version"));
   await assert.rejects(service.verify(admissionId), { code: "stale" });
   assert.equal(store.eventsOfKind("task.delegation_admitted").length, 2);
 });
 
 test("completion requires the same reviewed source, the settled result, and fresh passing mandatory evidence", async (t) => {
-  const { service, input, intent, store } = await fixture(t);
-  const { admissionId } = await service.admit(intent("completed"), session.id);
+  const { service, input, intent, store, admit } = await fixture(t);
+  const { admissionId } = await admit(intent("completed"));
   await assert.rejects(service.inspectIntegration({ admissionId, assignment, observation }), { code: "invalid_input" });
   assert.equal(await service.recordLaunch(admissionId, assignment), "inserted");
   assert.equal(await service.recordLaunch(admissionId, assignment), "duplicate");
