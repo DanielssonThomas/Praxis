@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -46,7 +47,11 @@ test("the native pinned Codex worker delivers the brief and policy, bounds outpu
   const outputSent = Promise.withResolvers();
   const finish = Promise.withResolvers();
   const deliveries = [];
-  const output = "0123456789".repeat(1_800) + " retained native output";
+  const marker = "native-fixture-" + randomUUID();
+  const fixture = marker + "\n";
+  const readCall = "read-scoped-fixture";
+  const padding = "0123456789".repeat(1_800) + "\n";
+  const output = padding + marker;
   let fixtureFailure;
   const server = createServer(async (request, response) => {
     try {
@@ -56,25 +61,48 @@ test("the native pinned Codex worker delivers the brief and policy, bounds outpu
       const chunks = [];
       for await (const bytes of request) chunks.push(bytes);
       const body = JSON.parse(Buffer.concat(chunks));
-      const userMessages = body.input.filter(({ type, role }) => type === "message" && role === "user")
-        .flatMap(({ content }) => content).map(({ text }) => text);
-      const text = userMessages.at(-1);
-      const brief = JSON.parse(text.slice(text.indexOf("\n") + 1));
-      assert.deepEqual(brief, briefFor(brief.id));
-      assert.ok(userMessages.slice(0, -1).some((item) => item.includes(`Axiom policy digest: ${corePolicy.digest}\n\n${core}`)));
-      deliveries.push(brief.id);
-      const id = "response-" + brief.id;
-      const message = { id: "message-" + brief.id, type: "message", role: "assistant", status: "completed",
-        content: [{ type: "output_text", text: output, annotations: [] }] };
+      const toolResult = body.input.find(({ type, call_id }) => type === "custom_tool_call_output" && call_id === readCall);
       response.writeHead(200, { "Content-Type": "text/event-stream" });
-      response.write(frame({ type: "response.created", response: { id } }));
-      response.write(frame({ type: "response.output_item.added", item: { ...message, content: [], status: "in_progress" } }));
-      if (brief.id === "task_cancel") {
+      if (!toolResult) {
+        const userMessages = body.input.filter(({ type, role }) => type === "message" && role === "user")
+          .flatMap(({ content }) => content).map(({ text }) => text);
+        const text = userMessages.at(-1);
+        const brief = JSON.parse(text.slice(text.indexOf("\n") + 1));
+        assert.deepEqual(brief, briefFor(brief.id));
+        assert.ok(userMessages.slice(0, -1).some((item) => item.includes(`Axiom policy digest: ${corePolicy.digest}\n\n${core}`)));
+        deliveries.push(brief.id);
+        if (brief.id === "task_complete") {
+          assert.ok(body.tools?.some(({ name }) => name === "exec"), "The native worker must advertise Code Mode exec.");
+          const id = "response-workspace-read";
+          const item = { type: "custom_tool_call", call_id: readCall, name: "exec", input: `
+            const result = await tools.exec_command({ cmd: "cat -- fixture.txt" });
+            if (result.exit_code !== 0) throw new Error("Workspace read failed.");
+            text(result.output);
+          ` };
+          response.write(frame({ type: "response.created", response: { id } }));
+          response.write(frame({ type: "response.output_item.done", item }));
+          response.end(frame({ type: "response.completed", response: {
+            id, status: "completed", usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+          } }));
+          return;
+        }
+        assert.equal(brief.id, "task_cancel");
+        response.write(frame({ type: "response.created", response: { id: "response-cancel" } }));
         response.once("close", disconnected.resolve);
         cancelled.resolve();
         return;
       }
-      response.write(frame({ type: "response.output_text.delta", delta: output, item_id: message.id, output_index: 0, content_index: 0 }));
+      const textItems = Array.isArray(toolResult.output) ? toolResult.output.map(({ text }) => text) : [toolResult.output];
+      const fixtureLine = textItems.find((text) => typeof text === "string" && text.trimEnd() === marker)?.trimEnd();
+      assert.ok(fixtureLine,
+        "The native workspace command must exit successfully and return the exact staged marker as a whole line.");
+      const id = "response-report";
+      const report = padding + fixtureLine;
+      const message = { id: "message-report", type: "message", role: "assistant", status: "completed",
+        content: [{ type: "output_text", text: report, annotations: [] }] };
+      response.write(frame({ type: "response.created", response: { id } }));
+      response.write(frame({ type: "response.output_item.added", item: { ...message, content: [], status: "in_progress" } }));
+      response.write(frame({ type: "response.output_text.delta", delta: report, item_id: message.id, output_index: 0, content_index: 0 }));
       response.write(frame({ type: "response.output_item.done", item: message }));
       outputSent.resolve();
       await finish.promise;
@@ -83,6 +111,7 @@ test("the native pinned Codex worker delivers the brief and policy, bounds outpu
       } }));
     } catch (error) {
       fixtureFailure = error;
+      outputSent.resolve();
       response.end();
     }
   });
@@ -97,11 +126,13 @@ test("the native pinned Codex worker delivers the brief and policy, bounds outpu
   const codex = new CodexExecutor({
     program: process.env.PRAXIS_CODEX_BIN, axiomRoot: source, root, model: "gpt-5.4",
     prepareProfile: ({ codexHome }) => writeFile(join(codexHome, "config.toml"), [
-      'model_provider = "fixture"', "[model_providers.fixture]", 'name = "Disposable localhost"',
+      'model_provider = "fixture"', "[features]", "code_mode_only = true",
+      "[code_mode]", "disable_in_process_fallback = true",
+      "[model_providers.fixture]", 'name = "Disposable localhost"',
       `base_url = "http://127.0.0.1:${server.address().port}/v1"`, 'wire_api = "responses"',
       "requires_openai_auth = false", "request_max_retries = 0", "stream_max_retries = 0",
     ].join("\n")),
-    prepareWorkspace: ({ workspace }) => writeFile(join(workspace, "fixture.txt"), "Scoped fixture.\n"),
+    prepareWorkspace: ({ workspace }) => writeFile(join(workspace, "fixture.txt"), fixture),
   });
   const host = await codex.capabilities();
   assert.deepEqual(host.host, { runtime: "codex", version: "0.172.0-alpha.2", os: "linux", architecture: "x64", surface: "cli" });
@@ -117,6 +148,7 @@ test("the native pinned Codex worker delivers the brief and policy, bounds outpu
 
   await deadline(cancelled.promise, "The second native task did not reach the localhost provider");
   await deadline(outputSent.promise, "The first worker did not reach the scripted output");
+  if (fixtureFailure) throw fixtureFailure;
   const live = await deadline((async () => {
     for (let attempt = 0; attempt < 300; attempt++) {
       const current = codex.inspectAssignment(complete).snapshot;
@@ -149,7 +181,7 @@ test("the native pinned Codex worker delivers the brief and policy, bounds outpu
   assert.notEqual(paths[0], paths[1]);
   for (const workspace of paths) {
     assert.deepEqual(await readdir(workspace), ["fixture.txt"]);
-    assert.equal(await readFile(join(workspace, "fixture.txt"), "utf8"), "Scoped fixture.\n");
+    assert.equal(await readFile(join(workspace, "fixture.txt"), "utf8"), fixture);
   }
-  t.diagnostic("Real isolated Codex CLI completion and metering, exact policy and brief delivery, bounded output and active cancellation passed.");
+  t.diagnostic("Real isolated Codex CLI workspace read, completion and metering, exact policy and brief delivery, bounded output and active cancellation passed.");
 });
