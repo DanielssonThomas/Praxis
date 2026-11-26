@@ -32,7 +32,7 @@ function installActivityFixture() {
           fixture.decisions.push(structuredClone(request));
           const card = fixture.feed.find((entry) => entry.requestId === request.requestId);
           if (card?.phase.state !== "attention" || card.phase.approval.id !== request.approvalId) {
-            throw { code: "invalid_approval", message: "This approval does not match the exact action." };
+            throw { code: "conflict", message: "This approval no longer matches the reviewed action." };
           }
           card.phase = request.decision === "deny" ? { state: "denied" }
             : { state: "resolved", native: { status: "stopping" } };

@@ -77,7 +77,7 @@ export class ActivityService {
     }
   }
 
-  async refresh(): Promise<void> {
+  private async refresh(preserveFeedback = false): Promise<void> {
     if (!this.unlocked() || this.busy() || this.refreshing) return;
     const revision = this.revision;
     this.refreshing = true;
@@ -87,7 +87,7 @@ export class ActivityService {
       if (result.status === "ok") {
         const recovering = !this.feedCurrent();
         this.acceptFeed(result.data);
-        if (recovering || this.status() === "No activity.") {
+        if ((recovering && !preserveFeedback) || this.status() === "No activity.") {
           this.status.set(result.data.length ? "" : "No activity.");
         }
       } else {
@@ -130,7 +130,7 @@ export class ActivityService {
       const result = await request();
       if (result.status === "error") {
         const code = result.error?.code;
-        if (code === "invalid_approval" || code === "already_decided" || code === "expired" || code === "invalidated") {
+        if (code === "conflict" || code === "invalid_input") {
           this.feedCurrent.set(false);
         }
         this.report(result.error);
@@ -142,7 +142,7 @@ export class ActivityService {
       this.status.set("The activity request failed.");
     } finally {
       this.busy.set(false);
-      void this.refresh();
+      void this.refresh(true);
     }
   }
 
