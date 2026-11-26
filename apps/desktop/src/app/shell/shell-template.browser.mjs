@@ -153,6 +153,7 @@ test("the permanent composer sends multiline text and retains native status and 
   await activity.press("Enter");
   await activityPanel.waitFor({ state: "hidden" });
   await menu.press("Enter");
+  await page.getByRole("navigation", { name: "Main navigation" }).waitFor({ state: "visible" });
   await menu.press("ArrowDown");
   assert.equal(await page.getByRole("link", { name: "Manager" }).evaluate((node) => node === document.activeElement), true);
   await activity.press("Enter");
