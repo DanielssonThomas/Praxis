@@ -41,6 +41,9 @@ async function main(): Promise<void> {
       loadGrant: async () => {
         const config = await load();
         if (resolve(config.database) !== database) throw new Error("The background authority database changed.");
+        if (config.skills?.curatorPrincipalId === principalId) {
+          throw new Error("Background coordination requires its configured read-only MCP principal.");
+        }
         const grant = config.grants.find((entry) => entry.principalId === principalId);
         if (grant === undefined) throw new Error("The configured background principal is unavailable.");
         return grant;

@@ -24,12 +24,23 @@ import type { OperationalStore } from "@praxis/state";
 import { z } from "zod";
 import { MemoryError, memoryId, recordMemorySchema, retrieveMemorySchema } from "./memory.js";
 import type { ProjectMemory } from "./memory.js";
+import {
+  decideProposalInputSchema, decideProposalSchema, inspectProposalsSchema, loadCuratedSkillSchema,
+  proposedSkillSchema, reviewProposalsSchema, SkillCurationError, skillSelectionSchema,
+} from "./skills.js";
+import type { CuratedSkills } from "./skills.js";
+export { CuratedSkills } from "./skills.js";
+export type { PublishedSkill, SkillSelection } from "./skills.js";
 
 const sessionGrant = z.strictObject({
   sessionId: sessionIdSchema,
   canReport: z.boolean(),
   assignment: hermesAssignmentSchema.optional(),
   operatorCanTakeover: z.boolean().optional(),
+  curatedSkills: z.array(skillSelectionSchema).max(16).refine(
+    (skills) => new Set(skills.map(({ skillId }) => skillId)).size === skills.length,
+    "Each selected skill must be unique per session",
+  ).optional(),
 }).refine(
   ({ sessionId, assignment }) => assignment === undefined || assignment.sessionId === sessionId,
   "A native assignment must match the granted session",
@@ -44,6 +55,7 @@ const grantSchema = z.strictObject({
     "Granted session IDs must be unique",
   ),
   actionKinds: z.array(actionSchema.shape.kind),
+  canReviewSkills: z.boolean().optional(),
   memoryProjects: z.array(z.strictObject({ projectId: memoryId, canWrite: z.boolean() })).refine(
     (projects) => new Set(projects.map(({ projectId }) => projectId)).size === projects.length,
     "Granted memory projects must be unique",
@@ -63,13 +75,18 @@ export const mcpAuthoritySchema = z.strictObject({
   database: z.string().min(1),
   grants: mcpGrantsSchema,
   memory: z.strictObject({ directory: z.string().min(1) }).optional(),
-});
+  skills: z.strictObject({ directory: z.string().min(1), curatorPrincipalId: principalIdSchema }).optional(),
+}).refine(
+  ({ skills, grants }) => skills === undefined || grants.some(({ principalId }) => principalId === skills.curatorPrincipalId),
+  "The configured skill curator needs an MCP grant",
+);
 
 interface Options {
   store: OperationalStore;
   grants: unknown;
   runtime?: Pick<HermesRuntime, "inspectAssignment">;
   memory?: { service: ProjectMemory; enabled: () => Promise<boolean> };
+  skills?: { service: CuratedSkills; curatorPrincipalId: string };
 }
 type ToolErrorCode = "forbidden" | "not_found";
 
@@ -111,7 +128,9 @@ async function answer(operation: () => Record<string, unknown> | Promise<Record<
     return result(await operation());
   } catch (error) {
     if (error instanceof ToolError) return result({ code: error.code, message: error.message }, true);
-    if (error instanceof MemoryError) return result({ code: error.code, message: error.message }, true);
+    if (error instanceof MemoryError || error instanceof SkillCurationError) {
+      return result({ code: error.code, message: error.message }, true);
+    }
     if (error instanceof OperationalStoreError && error.code === "identity_conflict") {
       return result({ code: "identity_conflict", message: "This submission ID already records different content." }, true);
     }
@@ -142,7 +161,7 @@ export async function inspectScopedWorker({ store, runtime }: Pick<Options, "sto
   return { session, runtime: { availability: "available" as const, snapshot } };
 }
 
-function makeMcp({ store, runtime, memory }: Options, grant: Grant): McpServer {
+function makeMcp({ store, runtime, memory, skills }: Options, grant: Grant, curator: Grant | undefined): McpServer {
   const mcp = new McpServer({ name: "praxis", version: "1.0.0" });
   mcp.registerTool("inspect_task", {
     description: "Read a task in the authenticated principal's scope.",
@@ -236,7 +255,80 @@ function makeMcp({ store, runtime, memory }: Options, grant: Grant): McpServer {
     }));
   }
 
+  if (skills && curator) registerSkillTools(mcp, store, grant, curator, skills.service);
+
   return mcp;
+}
+
+function registerSkillTools(mcp: McpServer, store: OperationalStore, grant: Grant, curator: Grant, skills: CuratedSkills): void {
+  const canCurate = grant.principalId === curator.principalId;
+  if (!canCurate && grant.sessions.some(({ canReport }) => canReport)) {
+    mcp.registerTool("propose_skill", {
+      description: "Record a verified worker finding for skill curation. Use a stable generic key for the recurring problem and cite scoped reproduction evidence.",
+      inputSchema: proposedSkillSchema,
+      annotations: { destructiveHint: false, idempotentHint: true },
+    }, (input) => answer(() => {
+      if (!permitSession(grant, input.sessionId).canReport) {
+        throw new ToolError("forbidden", "This principal cannot submit for the worker session.");
+      }
+      const session = required(store.getSession(input.sessionId));
+      permitTask(grant, session.taskId);
+      permitTask(curator, session.taskId);
+      return skills.submit(input, grant.principalId, session.taskId);
+    }));
+  }
+
+  if (canCurate || grant.canReviewSkills) {
+    mcp.registerTool("inspect_skill_proposals", {
+      description: "Inspect grouped findings and their scoped evidence. Select an exact review revision and use nextBefore to retrieve older findings at that revision.",
+      inputSchema: inspectProposalsSchema,
+      annotations: { readOnlyHint: true },
+    }, (input) => answer(() => skills.inspect(input, grant.taskIds, canCurate)));
+    mcp.registerTool("list_curated_skills", {
+      description: "Search existing owners by listing published skill names, descriptions and latest versions.",
+      inputSchema: z.strictObject({}),
+      annotations: { readOnlyHint: true },
+    }, () => answer(() => ({ skills: skills.catalog() })));
+  }
+
+  if (canCurate) {
+    mcp.registerTool("request_skill_review", {
+      description: "Queue a bounded background review of the exact proposal revision using Axiom knowledge. Reuse the same task for retries.",
+      inputSchema: reviewProposalsSchema,
+      annotations: { destructiveHint: false, idempotentHint: true },
+    }, ({ findingKey, revision, taskId }) => answer(() => {
+      permitTask(grant, taskId);
+      const workId = skills.review(findingKey, revision, grant.taskIds, taskId);
+      const instruction = "Review this proposal using the installed Axiom knowledge skill (axiom:knowledge). "
+        + "Read the scoped evidence through inspect_skill_proposals with " + JSON.stringify({ findingKey, revision })
+        + ". Follow nextBefore at that revision to read older findings. Inspect the authoritative owner and return a rationale, verification and advice "
+        + "to reuse, update, create or reject. Use list_curated_skills to check for existing skills.";
+      const write = store.management.enqueue({ id: workId, taskId, kind: "maintenance", instruction }, Date.now());
+      return { workId, write };
+    }));
+    mcp.registerTool("decide_skill_proposal", {
+      description: "As the configured curator, record a decision and rationale after applying the installed Axiom knowledge workflow. "
+        + "Create and update require verified generic Markdown, owner and maintenance lifecycle. Update requires the current version.",
+      inputSchema: decideProposalInputSchema,
+      annotations: { idempotentHint: true },
+    }, (input) => answer(() => skills.decide(decideProposalSchema.parse(input), grant.principalId, grant.taskIds)));
+  }
+
+  if (grant.sessions.some(({ curatedSkills }) => curatedSkills?.length)) {
+    mcp.registerTool("load_curated_skill", {
+      description: "Load a published skill's generic Markdown at the exact version selected for an authorized session.",
+      inputSchema: loadCuratedSkillSchema,
+      annotations: { readOnlyHint: true },
+    }, ({ sessionId, skillId, version }) => answer(() => {
+      const access = permitSession(grant, sessionId);
+      const session = required(store.getSession(sessionId));
+      permitTask(grant, session.taskId);
+      if (!access.curatedSkills?.some((selection) => selection.skillId === skillId && selection.version === version)) {
+        throw new ToolError("forbidden", "This skill version is outside the session's selection.");
+      }
+      return { skill: skills.read({ skillId, version }) };
+    }));
+  }
 }
 
 function reject(response: ServerResponse, status: number, message: string): void {
@@ -252,6 +344,8 @@ function validLocalRequest(request: IncomingMessage): boolean {
 
 export function createPraxisMcpServer(options: Options) {
   const grants = new Map(mcpGrantsSchema.parse(options.grants).map((grant) => [grant.tokenDigest, grant]));
+  const curator = [...grants.values()].find(({ principalId }) => principalId === options.skills?.curatorPrincipalId);
+  if (options.skills && curator === undefined) throw new Error("The configured skill curator needs an MCP grant.");
 
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     if (request.url !== "/mcp") {
@@ -271,7 +365,7 @@ export function createPraxisMcpServer(options: Options) {
       return;
     }
 
-    const mcp = makeMcp(options, grant);
+    const mcp = makeMcp(options, grant, curator);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     response.setHeader("Cache-Control", "no-store");
     response.once("close", () => { void mcp.close().catch(() => {}); });

@@ -113,3 +113,9 @@ PRAXIS_CODEX_ACCOUNT_HOME=/absolute/path/to/authorized-account-home \
 PRAXIS_CODEX_MODEL=entitled-model \
 node --test tests/runtime/codex.account.mjs
 ```
+
+## Curated skills
+
+Use the trusted executor's `selectedSkills({ task, session, signal })` callback to select exact approved versions for a task and session. Management code can pass `CuratedSkills.read({ skillId, version })` results from the local registry. The native executor checks the selected content digests, stages the selected files in the fresh worker home and cleans them up at settlement. Native discovery exposes their metadata. The worker can open the selected instructions on demand. [Curation authority and publication](mcp.md#curated-skills)
+
+The credential-free native fixture verifies selected and unselected assignments and observes the actual Markdown read through Code Mode.

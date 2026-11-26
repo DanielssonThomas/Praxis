@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import { skillEvaluation } from "../fixtures/skill-evaluation.mjs";
 
 const corePolicy = {
   version: "1",
@@ -39,6 +40,8 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
   assert.ok(process.env.PRAXIS_CODEX_BIN && process.env.PRAXIS_AXIOM_ROOT, "Set PRAXIS_CODEX_BIN and PRAXIS_AXIOM_ROOT");
   const { CodexExecutor } = await import("../../packages/codex-runtime/dist/index.js");
   const { runtimeOutputLimit } = await import("@praxis/contracts");
+  const { CuratedSkills } = await import("@praxis/mcp");
+  const { loadSkillValidator } = await import("../../packages/mcp/dist/skills-axiom.js");
   const root = await mkdtemp(join(tmpdir(), "praxis-codex-live-"));
   const source = process.env.PRAXIS_AXIOM_ROOT;
   const core = (await readFile(join(source, "core/AXIOMS.md"), "utf8")).trimEnd();
@@ -50,6 +53,27 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
   const marker = "native-fixture-" + randomUUID();
   const fixture = marker + "\n";
   const readCall = "read-scoped-fixture";
+  const skillId = "verify-projection-fixture";
+  const skillDescription = "Inspect the persisted projection in a disposable worker fixture.";
+  const skillBody = "Check the persisted projection using marker " + randomUUID() + ".";
+  const { task: selectedTask, session: selectedSession } = requestFor("complete");
+  const registry = new CuratedSkills({ directory: join(root, "curated"), validate: await loadSkillValidator(source) });
+  registry.submit({
+    sessionId: selectedSession.id, submissionId: "event_curated_fixture", findingKey: skillId,
+    observation: "A projection could show superseded output.", evidence: "The scoped projection fixture reproduced the stale value.",
+  }, "principal_fixture_worker", selectedTask.id);
+  await registry.decide({
+    findingKey: skillId, revision: 1, decision: "create",
+    sourceInspected: "Existing workflow fixtures.", rationale: "Keep one portable verification procedure.",
+    draft: {
+      skillId, description: skillDescription, body: skillBody, owner: "Fixture maintainer",
+      lifecycle: "Review when the projection changes.", verification: "The fixture reproduces and detects stale output.",
+      evaluation: skillEvaluation(skillId),
+    },
+  }, "principal_fixture_curator", [selectedTask.id]);
+  const published = registry.read({ skillId, version: 1 });
+  registry.close();
+  let nativeSkillPath;
   const padding = "0123456789".repeat(1_800) + "\n";
   const output = padding + marker;
   let fixtureFailure;
@@ -71,6 +95,11 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
         assert.deepEqual(brief, briefFor(brief.id));
         assert.ok(userMessages.slice(0, -1).some((item) => item.includes(`Axiom policy digest: ${corePolicy.digest}\n\n${core}`)));
         deliveries.push(brief.id);
+        const messages = body.input.filter(({ type }) => type === "message")
+          .flatMap(({ content }) => content).map(({ text }) => text);
+        assert.ok(messages.every((message) => !message.includes(skillBody)), "Discovery must not load skill instructions.");
+        assert.equal(messages.some((message) => message.includes(skillDescription)), brief.id === selectedTask.id,
+          "Only the selected Codex assignment should discover the curated skill.");
         if (brief.id === "task_complete") {
           assert.ok(body.tools?.some(({ name }) => name === "exec"), "The native worker must advertise Code Mode exec.");
           const id = "response-workspace-read";
@@ -78,6 +107,9 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
             const result = await tools.exec_command({ cmd: "cat -- fixture.txt" });
             if (result.exit_code !== 0) throw new Error("Workspace read failed.");
             text(result.output);
+            const skill = await tools.exec_command({ cmd: ${JSON.stringify("cat -- " + JSON.stringify(nativeSkillPath))} });
+            if (skill.exit_code !== 0) throw new Error("Curated skill read failed.");
+            text(skill.output);
           ` };
           response.write(frame({ type: "response.created", response: { id } }));
           response.write(frame({ type: "response.output_item.done", item }));
@@ -94,6 +126,8 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
       }
       const textItems = Array.isArray(toolResult.output) ? toolResult.output.map(({ text }) => text) : [toolResult.output];
       const fixtureLine = textItems.find((text) => text === marker || text === fixture);
+      assert.ok(textItems.some((text) => text === published.markdown || text === published.markdown.trimEnd()),
+        "Native Code Mode must read the published SKILL.md exactly.");
       const missingHost = textItems.some((text) => typeof text === "string" && text.includes("codex-code-mode-host")
         && /code.mode.{0,60}(unavailable|not found|missing)/i.test(text));
       assert.ok(fixtureLine, missingHost
@@ -128,13 +162,17 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
   });
   const codex = new CodexExecutor({
     program: process.env.PRAXIS_CODEX_BIN, axiomRoot: source, root, model: "gpt-5.4",
-    prepareProfile: ({ codexHome }) => writeFile(join(codexHome, "config.toml"), [
+    selectedSkills: async ({ task }) => task.id === selectedTask.id ? [published] : [],
+    prepareProfile: async ({ codexHome, userHome, task }) => {
+      if (task.id === selectedTask.id) nativeSkillPath = join(userHome, ".agents", "skills", skillId, "SKILL.md");
+      await writeFile(join(codexHome, "config.toml"), [
       'model_provider = "fixture"', "[features]", "code_mode_only = true",
       "[code_mode]", "disable_in_process_fallback = true",
       "[model_providers.fixture]", 'name = "Disposable localhost"',
       `base_url = "http://127.0.0.1:${server.address().port}/v1"`, 'wire_api = "responses"',
       "requires_openai_auth = false", "request_max_retries = 0", "stream_max_retries = 0",
-    ].join("\n")),
+      ].join("\n"));
+    },
     prepareWorkspace: ({ workspace }) => writeFile(join(workspace, "fixture.txt"), fixture),
     authorizeLaunch: async ({ task }) => {
       if (task.id === "task_denied_at_start") throw new Error("The fixture approval became stale after staging.");
@@ -190,5 +228,5 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
     assert.deepEqual(await readdir(workspace), ["fixture.txt"]);
     assert.equal(await readFile(join(workspace, "fixture.txt"), "utf8"), fixture);
   }
-  t.diagnostic("Real isolated Codex CLI workspace read, completion and metering, exact policy and brief delivery, bounded output and active cancellation passed.");
+  t.diagnostic("The pinned Codex CLI discovered the selected skill, read its exact Markdown through native Code Mode, and omitted it from the unselected assignment.");
 });
