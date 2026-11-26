@@ -27,6 +27,7 @@
     "test:desktop:control": "node --test tests/runtime/desktop-control.live.mjs",
     "test:desktop:reports-settings": "node --test tests/runtime/desktop-reports-settings.live.mjs",
     "test:browser": "node --test tests/browser/shell.browser.mjs",
+    "test:codex:live": "node --test tests/runtime/codex.live.mjs",
     "test:hermes": "node --test tests/runtime/hermes.live.mjs",
     "test:mcp:live": "node --test tests/runtime/mcp.live.mjs",
     "test:approval:live": "node --test tests/runtime/approval.live.mjs",
@@ -34,7 +35,7 @@
     "test:overview:live": "node --test tests/runtime/overview.live.mjs",
     "test:control:live": "node --test tests/runtime/control.live.mjs",
     "typecheck": "tsc --project tsconfig.json && npm run typecheck --workspace @praxis/desktop",
-    "build": "tsc --project packages/contracts/tsconfig.json && tsc --project packages/state/tsconfig.json && tsc --project packages/settings/tsconfig.json && tsc --project packages/hermes-runtime/tsconfig.json && tsc --project packages/mcp/tsconfig.json && tsc --project packages/management/tsconfig.json && tsc --project packages/approvals/tsconfig.json && tsc --project packages/kanban/tsconfig.json && tsc --project packages/shell/tsconfig.json && npm run build:desktop"
+    "build": "tsc --project packages/contracts/tsconfig.json && tsc --project packages/state/tsconfig.json && tsc --project packages/settings/tsconfig.json && tsc --project packages/hermes-runtime/tsconfig.json && tsc --project packages/codex-runtime/tsconfig.json && tsc --project packages/mcp/tsconfig.json && tsc --project packages/management/tsconfig.json && tsc --project packages/approvals/tsconfig.json && tsc --project packages/kanban/tsconfig.json && tsc --project packages/shell/tsconfig.json && npm run build:desktop"
   },
   "devDependencies": {
     "playwright": "1.65.1",

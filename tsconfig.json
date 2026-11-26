@@ -5,6 +5,7 @@
     "paths": {
       "@praxis/approvals": ["./packages/approvals/src/index.ts"],
       "@praxis/approvals/http": ["./packages/approvals/src/http.ts"],
+      "@praxis/codex-runtime": ["./packages/codex-runtime/src/index.ts"],
       "@praxis/contracts": ["./packages/contracts/src/index.ts"],
       "@praxis/hermes-runtime": ["./packages/hermes-runtime/src/index.ts"],
       "@praxis/kanban": ["./packages/kanban/src/index.ts"],

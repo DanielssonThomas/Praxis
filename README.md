@@ -24,3 +24,5 @@ Run `npm run start:desktop` to develop the Angular shell. Open **Menu** to switc
 Run `npm start` after building to run the Node host and its existing browser shell. See [host navigation and browser checks](docs/shell.md) and [portable settings](docs/settings.md).
 
 See the [Hermes manager setup](docs/hermes-manager.md) to install the named Linux manager profile and connect it to Praxis MCP.
+
+The local worker API can run direct Codex assignments on the pinned Linux host. [Direct Codex workers](docs/codex-worker.md)
