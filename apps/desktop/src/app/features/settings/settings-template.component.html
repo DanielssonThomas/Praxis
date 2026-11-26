@@ -1,4 +1,7 @@
-<h1>Settings</h1>
+<header>
+  <h1>Settings</h1>
+  <p>Save these preferences to the local Praxis settings file.</p>
+</header>
 @if (settings(); as current) {
   <praxis-settings-form [settings]="current" [busy]="busy()" [feedback]="status()" (submitted)="save($event)" />
 } @else {

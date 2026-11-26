@@ -1,10 +1,13 @@
 <article [attr.data-metric]="display().metric">
   <h2>{{ display().label }}</h2>
-  <p data-chart-summary>{{ latest() ?? "No measurements in this range." }}</p>
+  <p class="summary" data-chart-summary>{{ latest() ?? "No measurements in this range." }}</p>
   @if (latest()) {
     <div class="chart">
       <canvas #chartCanvas role="img" [attr.aria-label]="display().label + ' over ' + days() + ' days (UTC)'"></canvas>
     </div>
+    @if (missing(); as count) {
+      <p class="gaps">{{ count }} {{ count === 1 ? "day" : "days" }} without a measurement.</p>
+    }
     @if (chartFailed()) { <p role="status">The local chart could not be drawn.</p> }
   }
 </article>

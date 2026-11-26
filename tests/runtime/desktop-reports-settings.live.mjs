@@ -78,10 +78,12 @@ async function setInput(app, selector, value) {
 }
 
 async function assertNarrow(app) {
-  await app.resize(390, 650);
+  await app.resize(360, 620);
   await eventually(() => app.execute(`
     const main = document.querySelector("main");
-    return window.innerWidth <= 390 && main.scrollWidth <= main.clientWidth;
+    const composer = document.querySelector("praxis-command-bar form");
+    return window.innerWidth === 360 && window.innerHeight === 620 && main.scrollWidth <= main.clientWidth
+      && main.getBoundingClientRect().bottom <= composer.getBoundingClientRect().top;
   `), "The rendered desktop view did not fit its narrow viewport.");
   assert.equal(await app.execute(`
     const shell = document.querySelector("praxis-shell");
@@ -89,6 +91,13 @@ async function assertNarrow(app) {
     const authenticatedStyle = [...document.querySelectorAll("style")].some((style) => style.nonce === nonce);
     return !!nonce && nonce !== "__TAURI_STYLE_NONCE__" && authenticatedStyle && getComputedStyle(shell).display === "grid";
   `), true, "The packaged WebKit must apply Tauri-nonced Angular component styles.");
+}
+
+async function customizeReports(app, expanded = true) {
+  const toggle = '[aria-controls="report-customization"]';
+  await (await app.element(toggle)).type(enter);
+  await eventually(() => app.execute("return document.querySelector(arguments[0])?.getAttribute('aria-expanded') === arguments[1]",
+    toggle, String(expanded)), "Keyboard activation did not change report customization.");
 }
 
 async function capture(app, name) {
@@ -113,6 +122,11 @@ test("packaged Settings edits an existing portable file, rejects invalid setting
   await eventually(() => app.execute("return document.querySelector('[name=managerProfile]')?.value === 'existing-manager'"),
     "The desktop editor did not read the existing settings.");
   await assertNarrow(app);
+  assert.equal(await app.execute(`
+    const save = document.querySelector('praxis-settings button[type=submit]').getBoundingClientRect();
+    const main = document.querySelector("main").getBoundingClientRect();
+    return save.top >= main.top && save.bottom <= main.bottom;
+  `), true, "Save settings is visible in the narrow workspace before scrolling.");
   await setInput(app, "[name=managerProfile]", "desktop-manager");
   await (await app.element("[name=autoPresent]")).click();
   await (await app.element(`${portableForm} button[type=submit]`)).click();
@@ -120,6 +134,7 @@ test("packaged Settings edits an existing portable file, rejects invalid setting
   assert.equal((await readSettings(settings)).manager.profile, "desktop-manager");
   assert.equal((await readSettings(settings)).worker.model, "legacy-worker");
   assert.equal((await readSettings(settings)).display.autoPresent, false);
+  await capture(app, "settings-saved-narrow.png");
 
   await setInput(app, "[name=managerProfile]", "INVALID PROFILE");
   await (await app.element(`${portableForm} button[type=submit]`)).click();
@@ -135,6 +150,8 @@ test("packaged Settings edits an existing portable file, rejects invalid setting
   await eventually(() => app.execute("return document.querySelector('[name=managerProfile]')?.value === 'desktop-manager'"),
     "The saved setting did not survive a desktop restart.");
   assert.equal(await app.execute("return document.querySelector('[name=autoPresent]').checked"), false);
+  await assertNarrow(app);
+  await capture(app, "settings-reopened-narrow.png");
 });
 
 test("packaged Reports charts operational values, scopes export, and clears history without deleting audit records", {
@@ -170,8 +187,10 @@ test("packaged Reports charts operational values, scopes export, and clears hist
   await (await app.element("[name=reportRange]")).type(up + enter);
   await eventually(() => app.execute('return document.querySelector(\'[data-metric="tokens"] canvas\')?.getAttribute("aria-label")?.includes("7 days")'),
     "The keyboard range change did not redraw the 7-day chart.");
+  await app.execute("document.querySelector('[data-metric=tokens] canvas').scrollIntoView({block:'center'})");
   await capture(app, "reports-measured-narrow.png");
 
+  await customizeReports(app);
   await (await app.element(`${preferences} [name=allowExport]`)).click();
   await (await app.element(`${preferences} [name=allowClearHistory]`)).click();
   await (await app.element(`${preferences} [name=metric_interventions]`)).click();
@@ -183,6 +202,9 @@ test("packaged Reports charts operational values, scopes export, and clears hist
   assert.equal(configured.retentionDays, 7);
   assert.equal(configured.visibleMetrics.includes("interventions"), false);
   assert.equal(configured.allowExport, true);
+  const preview = await app.element(`${preferences} [name=metric_taskMinutes]`);
+  await preview.click();
+  assert.equal(await app.execute("return document.querySelector('[data-report-export]').disabled"), false);
   await (await app.element("[data-report-export]")).click();
   const exportFile = await eventually(() => readFile(join(downloads, "praxis-report.json"), "utf8").catch(() => false),
     "The packaged export never reached the Downloads folder.");
@@ -192,7 +214,11 @@ test("packaged Reports charts operational values, scopes export, and clears hist
   assert.equal(row.metrics.tokens, 20);
   assert.equal(row.metrics.costUsd, 0);
   assert.equal("interventions" in row.metrics, false);
+  assert.equal("taskMinutes" in row.metrics, false);
+  assert.equal((await readSettings(settings)).reports.visibleMetrics.includes("taskMinutes"), true);
   assert.ok(report.buckets.some(({ metrics }) => metrics.tokens === null));
+  await capture(app, "reports-export-narrow.png");
+  await preview.click();
 
   async function changeCollection(enabled) {
     await (await app.element(`${preferences} [name=collectionEnabled]`)).click();
@@ -209,6 +235,15 @@ test("packaged Reports charts operational values, scopes export, and clears hist
   await changeCollection(true);
   await app.waitForText('[data-metric="tokens"] [data-chart-summary]', /20 on/);
 
+  await customizeReports(app, false);
+  await app.execute("document.querySelector('[data-report-clear]').scrollIntoView({block:'center'})");
+  await (await app.element("[data-report-clear]")).click();
+  const keep = '#report-clear-confirmation button:first-of-type';
+  await eventually(() => app.execute("return document.activeElement === document.querySelector(arguments[0])", keep),
+    "The history confirmation did not focus Keep history.");
+  await (await app.element(keep)).type("\uE00C");
+  assert.equal(await app.execute("return document.activeElement === document.querySelector('[data-report-clear]')"), true);
+  assert.equal((await readSettings(settings)).reports.clearedBefore, undefined);
   await (await app.element("[data-report-clear]")).click();
   await (await app.element("[data-confirm-report-clear]")).click();
   await app.waitForText("praxis-reports [data-reports-status]", "Report history cleared.");
@@ -219,7 +254,7 @@ test("packaged Reports charts operational values, scopes export, and clears hist
   const persisted = (await readSettings(settings)).reports;
   assert.ok(persisted.clearedBefore);
 
-  const lock = await app.element("praxis-reports .controls button");
+  const lock = await app.element("[data-report-lock]");
   await lock.click();
   await app.element(reportUnlock);
   assert.equal(await app.execute("return document.querySelector('praxis-reports canvas') === null"), true);
@@ -236,6 +271,8 @@ test("packaged Reports charts operational values, scopes export, and clears hist
   await setInput(app, `${reportUnlock} [name=operatorToken]`, token);
   await (await app.element(`${reportUnlock} button[type=submit]`)).click();
   await app.waitForText('[data-metric="tokens"] [data-chart-summary]', "No measurements in this range.");
+  assert.equal(await app.execute("return document.querySelector('[name=reportRange]').value"), "7");
+  await customizeReports(app);
   assert.equal(await app.execute("return document.querySelector('[name=retentionDays]').value"), "7");
   await capture(app, "reports-cleared-reopened.png");
 });

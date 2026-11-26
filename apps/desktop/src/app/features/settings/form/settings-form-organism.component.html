@@ -1,51 +1,62 @@
 <form aria-label="Portable settings" (submit)="submit($event)" novalidate>
-  <fieldset [disabled]="busy()">
-    <legend>Policy</legend>
-    <label><input type="checkbox" name="axiomEnabled" [checked]="settings().policy.axiomEnabled"> Enable Axiom</label>
-    <label class="field">
-      Axiom profiles
-      <input type="text" name="profiles" [value]="settings().policy.profiles.join(', ')" placeholder="Comma-separated profile names">
-    </label>
-  </fieldset>
-  <fieldset [disabled]="busy()">
-    <legend>Manager and worker</legend>
-    <label class="field">
-      Hermes manager profile
-      <input type="text" name="managerProfile" required maxlength="80" [value]="settings().manager.profile">
-    </label>
-    <label class="field">
-      Manager model
-      <input type="text" name="managerModel" maxlength="120" [value]="settings().manager.model ?? ''" placeholder="Runtime default">
-    </label>
-    <label class="field">
-      Worker runtime
-      <select name="workerRuntime" [value]="settings().worker.runtime">
-        <option value="codex">Codex</option>
-        <option value="claude">Claude</option>
-        <option value="hermes">Hermes</option>
-      </select>
-    </label>
-    <label class="field">
-      Worker model
-      <input type="text" name="workerModel" maxlength="120" [value]="settings().worker.model ?? ''" placeholder="Runtime default">
-    </label>
-  </fieldset>
-  <fieldset [disabled]="busy()">
-    <legend>Task budgets</legend>
-    <label class="field">
-      Maximum task tokens
-      <input type="number" name="maxTaskTokens" min="1" step="1" [value]="settings().budgets.maxTaskTokens ?? ''" placeholder="No cap">
-    </label>
-    <label class="field">
-      Maximum task cost in USD
-      <input type="number" name="maxTaskUsd" min="0" step="any" [value]="settings().budgets.maxTaskUsd ?? ''" placeholder="No cap">
-    </label>
-  </fieldset>
-  <fieldset [disabled]="busy()">
-    <legend>Memory and presentation</legend>
-    <label><input type="checkbox" name="memoryEnabled" [checked]="settings().memory.enabled"> Enable engineering memory</label>
-    <label><input type="checkbox" name="autoPresent" [checked]="settings().display.autoPresent"> Present contextual cards automatically</label>
-  </fieldset>
-  <p role="status">{{ feedback() }}</p>
-  <button praxisButton type="submit" [disabled]="busy()">Save settings</button>
+  <div class="settings-panels">
+    <fieldset [disabled]="busy()">
+      <legend>Policy</legend>
+      <label class="check"><input type="checkbox" name="axiomEnabled" [checked]="settings().policy.axiomEnabled"> Enable Axiom</label>
+      <label class="field">
+        Axiom profiles
+        <input type="text" name="profiles" [value]="settings().policy.profiles.join(', ')" placeholder="Comma-separated profile names">
+      </label>
+    </fieldset>
+    <fieldset [disabled]="busy()">
+      <legend>Manager and worker</legend>
+      <div class="paired-fields">
+        <label class="field">
+          Hermes manager profile
+          <input type="text" name="managerProfile" required maxlength="80" [value]="settings().manager.profile">
+        </label>
+        <label class="field">
+          Manager model
+          <input type="text" name="managerModel" maxlength="120" [value]="settings().manager.model ?? ''" placeholder="Runtime default">
+        </label>
+        <label class="field">
+          Worker runtime
+          <select name="workerRuntime" [value]="settings().worker.runtime">
+            <option value="codex">Codex</option>
+            <option value="claude">Claude</option>
+            <option value="hermes">Hermes</option>
+          </select>
+        </label>
+        <label class="field">
+          Worker model
+          <input type="text" name="workerModel" maxlength="120" [value]="settings().worker.model ?? ''" placeholder="Runtime default">
+        </label>
+      </div>
+    </fieldset>
+    <fieldset [disabled]="busy()">
+      <legend>Task budgets</legend>
+      <div class="paired-fields">
+        <label class="field">
+          Maximum task tokens
+          <input type="number" name="maxTaskTokens" min="1" step="1" [value]="settings().budgets.maxTaskTokens ?? ''" placeholder="No cap">
+        </label>
+        <label class="field">
+          Maximum task cost in USD
+          <input type="number" name="maxTaskUsd" min="0" step="any" [value]="settings().budgets.maxTaskUsd ?? ''" placeholder="No cap">
+        </label>
+      </div>
+    </fieldset>
+    <fieldset class="toggle-panel" [disabled]="busy()">
+      <legend>Memory</legend>
+      <label class="check"><input type="checkbox" name="memoryEnabled" [checked]="settings().memory.enabled"> Enable engineering memory</label>
+    </fieldset>
+    <fieldset class="toggle-panel" [disabled]="busy()">
+      <legend>Display</legend>
+      <label class="check"><input type="checkbox" name="autoPresent" [checked]="settings().display.autoPresent"> Present contextual cards automatically</label>
+    </fieldset>
+  </div>
+  <div class="save-bar">
+    <p role="status">{{ feedback() }}</p>
+    <button praxisButton type="submit" [disabled]="busy()">Save settings</button>
+  </div>
 </form>
