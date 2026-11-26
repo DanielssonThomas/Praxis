@@ -1,0 +1,7 @@
+<form [attr.aria-label]="formName()" autocomplete="off" (submit)="submit($event, credential)">
+  <label>
+    Operator token
+    <input #credential type="password" name="operatorToken" required autocomplete="off" maxlength="256">
+  </label>
+  <button praxisButton type="submit" [disabled]="busy()">{{ action() }}</button>
+</form>

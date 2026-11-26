@@ -151,3 +151,12 @@ test("menu navigation and history restore the unsubmitted draft for the selected
   await heading(page, "Overview");
   assert.equal(await field.inputValue(), "Overview draft");
 });
+
+test("the routed Overview respects reduced motion", async (t) => {
+  const page = await open(t, { width: 960, height: 720 }, "overview-reduced-motion", "#/overview");
+  const animation = () => page.locator("praxis-overview").evaluate((element) => getComputedStyle(element).animationName);
+  await heading(page, "Overview");
+  assert.match(await animation(), /overview-enter$/);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  assert.equal(await animation(), "none");
+});
