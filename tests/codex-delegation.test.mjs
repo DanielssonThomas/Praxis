@@ -51,11 +51,13 @@ test("detached Codex launch requires an exact durable and unexpired operator app
   assert.throws(() => approvedCodexRequest(store, requestId, "b".repeat(64), now), { code: "invalidated" });
   assert.throws(() => approvedCodexRequest(store, requestId, scopeDigest, now + 10_000), { code: "invalidated" });
   assert.deepEqual(approvedCodexRequest(store, requestId, scopeDigest, now), { requestId, action, actorId });
+  stage("settlement", { outcome: "uncertain", reason: "The detached start was not confirmed." });
+  assert.throws(() => approvedCodexRequest(store, requestId, scopeDigest, now), { code: "invalidated" });
 });
 
 test("a reopened native worker journal retains one exact bounded result and usage receipt", async (t) => {
   const { root } = await fixture(t);
-  const { CodexObservationJournal } = await module("-journal");
+  const { CodexObservationJournal, visibleCodexObservation } = await module("-journal");
   const journal = new CodexObservationJournal(join(root, "observations"));
   const assignment = { schemaVersion: 1, taskId, sessionId, runtime: "codex", runId: "worker_fixture_exact" };
   const snapshot = { schemaVersion: 1, taskId, sessionId, status: "running", output: {
@@ -68,8 +70,11 @@ test("a reopened native worker journal retains one exact bounded result and usag
   await journal.save(record);
   const reopened = new CodexObservationJournal(join(root, "observations"));
   assert.deepEqual(await reopened.get(requestId), record);
+  assert.equal(visibleCodexObservation(record, now + 1_000).snapshot.status, "running");
+  assert.deepEqual(visibleCodexObservation(record, now + 10_001), { snapshot: { ...snapshot, status: "unknown" }, usage });
   await assert.rejects(journal.save({ ...record, observation: { snapshot: { ...snapshot, sessionId: "session_other" }, usage } }));
   const settled = { ...record, observation: { snapshot: { ...snapshot, status: "completed" }, usage } };
   await journal.save(settled);
   assert.deepEqual(await reopened.list(), [settled]);
+  assert.deepEqual(visibleCodexObservation(settled, now + 10_001), settled.observation);
 });
