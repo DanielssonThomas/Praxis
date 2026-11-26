@@ -7,6 +7,9 @@ import type { McpGrant } from "@praxis/mcp";
 import { managementWorkSchema } from "@praxis/state";
 import type { ManagementClaim, OperationalStore } from "@praxis/state";
 
+export { EffectivePolicyError, EffectivePolicyService } from "./effective-policy.js";
+export type { EffectiveTaskAuthority } from "./effective-policy.js";
+
 const terminal = new Set(["completed", "failed", "stopped", "interrupted"]);
 const leaseMs = 60_000;
 const deduplicationMs = 23 * 60 * 60 * 1_000;

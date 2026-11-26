@@ -165,6 +165,8 @@ export const providerDeliveryEventKindSchema = z.enum([
   "provider.pr_opened", "provider.pr_merged", "provider.ticket_completed",
 ]);
 const workerReportKind = z.templateLiteral(["worker.", workerReportPhaseSchema]);
+const policyDigest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+const authorityRevision = z.int().positive();
 const eventDetailsSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("worker_report"),
@@ -188,7 +190,27 @@ const eventDetailsSchema = z.discriminatedUnion("type", [
     type: z.literal("management_escalation"), workId: eventIdSchema, actorId: principalIdSchema, reason: nonblankText.max(1_024),
     action: actionSchema,
   }),
+  z.strictObject({
+    type: z.literal("policy_authority"), revision: authorityRevision, authorityDigest: policyDigest,
+    protectedSourceDigest: policyDigest, planDigest: policyDigest,
+  }),
+  z.strictObject({
+    type: z.literal("policy_admission"), requestId: eventIdSchema, sessionId: sessionIdSchema,
+    revision: authorityRevision, fingerprint: policyDigest, sourceDigest: policyDigest,
+  }),
+  z.strictObject({ type: z.literal("policy_launch"), admissionId: eventIdSchema, assignment: workerAssignmentSchema }),
+  z.strictObject({
+    type: z.literal("policy_completion"), admissionId: eventIdSchema, reviewerId: principalIdSchema,
+    sourceDigest: policyDigest, receiptDigest: policyDigest, runId: workerAssignmentSchema.shape.runId,
+    sourceRevision: nonblankText.optional(),
+    verificationRunId: z.string().regex(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/),
+  }),
 ]);
+
+const policyEventKinds: Readonly<Partial<Record<string, string>>> = {
+  policy_authority: "task.policy_authorized", policy_admission: "task.delegation_admitted",
+  policy_launch: "task.delegation_launched", policy_completion: "task.completed",
+};
 
 export const eventSchema = z.strictObject({
   ...version,
@@ -225,6 +247,13 @@ export const eventSchema = z.strictObject({
   if (details?.type === "management_escalation" && (kind !== "management.escalated" || subject.kind !== "task"
     || details.action.kind !== "management.review" || details.action.target.kind !== "task" || details.action.target.id !== subject.id)) {
     context.addIssue({ code: "custom", path: ["details"], message: "Management review requires its exact task subject" });
+  }
+  const policyKind = details && policyEventKinds[details.type];
+  if (details && policyKind !== undefined) {
+    if (subject.kind !== "task" || kind !== policyKind
+      || (details.type === "policy_launch" && details.assignment.taskId !== subject.id)) {
+      context.addIssue({ code: "custom", path: ["details"], message: "Policy records require their exact task event" });
+    }
   }
 });
 export type Event = z.infer<typeof eventSchema>;
