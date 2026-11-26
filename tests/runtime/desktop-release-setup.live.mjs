@@ -10,7 +10,7 @@ import { test } from "node:test";
 import { promisify } from "node:util";
 import { HermesRuntime } from "@praxis/hermes-runtime";
 import { enter, eventually, startDesktop } from "./desktop-fixture.mjs";
-import { providerFixture, stopProcess, until } from "./hermes-fixture.mjs";
+import { containsAxiomPolicy, providerFixture, stopProcess, until } from "./hermes-fixture.mjs";
 
 const run = promisify(execFile);
 const credential = () => randomBytes(32).toString("base64url");
@@ -22,13 +22,6 @@ const apiKey = credential();
 const operator = credential();
 const request = "Inspect the default policy fixture.";
 const reply = "The installed default manager answered.";
-
-function observedPolicy(prompt) {
-  return [...prompt.matchAll(/## Plugin Context: axiom\.policy-\d{3}\n<!-- hermes-plugin-section-chars:(\d+) -->\n\n/g)]
-    .map(({ 0: header, 1: length, index }) =>
-      Array.from(prompt.slice(index + header.length)).slice(0, Number(length)).join(""))
-    .join("\n\n");
-}
 
 async function command(desktop, input) {
   const element = await desktop.element('[aria-label="Command"]');
@@ -109,7 +102,7 @@ test("fresh installed Setup opens the default manager and its pinned policy runs
   provider = await providerFixture((call) => {
     if (call.messages.findLast(({ role }) => role === "user")?.content === request) {
       const prompt = call.messages.filter(({ role }) => role === "system").map(({ content }) => content).join("\n");
-      loaded ||= observedPolicy(prompt) === "Axiom policy digest " + setup.policy.digest + "\n\n" + core
+      loaded ||= containsAxiomPolicy(prompt, setup.policy.digest, core)
         && skills.every((name) => prompt.includes("axiom:" + name));
     }
     return { message: { role: "assistant", content: reply } };

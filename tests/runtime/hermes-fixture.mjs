@@ -188,3 +188,10 @@ export async function startShell(directory, environment = {}) {
     throw error;
   }
 }
+export function containsAxiomPolicy(prompt, digest, core) {
+  const installed = [...prompt.matchAll(/## Plugin Context: axiom\.policy-\d{3}\n<!-- hermes-plugin-section-chars:(\d+) -->\n\n/g)]
+    .map(({ 0: header, 1: length, index }) =>
+      Array.from(prompt.slice(index + header.length)).slice(0, Number(length)).join("")).join("\n\n");
+  const expected = `Axiom policy digest ${digest}\n\n${core}`;
+  return installed === expected || installed.startsWith(expected + "\n\n");
+}
