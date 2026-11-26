@@ -1,28 +1,39 @@
 <header>
-  <div class="header-row">
-    <span class="brand">Praxis</span>
-    <div class="actions">
-      @if (activityAvailable()) {
-        <button praxisButton type="button" id="activity-toggle" aria-controls="desktop-activity"
-          [attr.aria-expanded]="activityOpened()" (click)="activityToggled.emit()">Activity</button>
-      }
-      <button
-        praxisButton
-        #toggle
-        type="button"
-        aria-controls="main-navigation"
-        [attr.aria-expanded]="open()"
-        (click)="open.set(!open())"
-      >Menu</button>
-    </div>
-  </div>
-  <nav id="main-navigation" aria-label="Main navigation" [hidden]="!open()">
-    @for (view of views(); track view.id) {
-      <a
-        [routerLink]="['/', view.id]"
-        [attr.aria-current]="activeView() === view.id ? 'page' : null"
-        (click)="close($event)"
-      >{{ view.label }}</a>
-    }
-  </nav>
+  <button
+    praxisButton
+    #toggle
+    class="menu-toggle"
+    type="button"
+    aria-label="Menu"
+    title="Menu"
+    aria-controls="main-navigation"
+    [attr.aria-expanded]="open()"
+    (click)="open.set(!open())"
+    (keydown.arrowdown)="focusNavigation($event)"
+  ><span class="menu-icon" aria-hidden="true"></span></button>
+  @if (activityAvailable()) {
+    <button praxisButton type="button" id="activity-toggle" aria-controls="desktop-activity"
+      [attr.aria-expanded]="activityOpened()" (click)="activityToggled.emit()">Activity</button>
+  }
 </header>
+<nav id="main-navigation" aria-label="Main navigation" [hidden]="!open()">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <span>Praxis</span>
+  </div>
+  @for (section of sections(); track section.id) {
+    <div class="section" role="group" [attr.aria-labelledby]="'nav-' + section.id">
+      <h2 [id]="'nav-' + section.id">{{ section.label }}</h2>
+      <div class="destinations">
+        @for (view of section.views; track view.id) {
+          <a
+            #destination
+            [routerLink]="['/', view.id]"
+            [attr.aria-current]="activeView() === view.id ? 'page' : null"
+            (click)="close($event)"
+          >{{ view.label }}</a>
+        }
+      </div>
+    </div>
+  }
+</nav>

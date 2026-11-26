@@ -2,19 +2,33 @@ import type { ShellCommand } from "./shell-command.model";
 import type { ShellView } from "./shell-view.model";
 
 export const views = [
-  { id: "manager", label: "Manager", short: "m" },
-  { id: "overview", label: "Overview", short: "o" },
-  { id: "kanban", label: "Kanban", short: "k" },
-  { id: "reports", label: "Reports", short: "r" },
-  { id: "settings", label: "Settings", short: "s" },
+  { id: "manager", label: "Manager", short: "m", section: "workspace" },
+  { id: "overview", label: "Overview", short: "o", section: "workspace" },
+  { id: "kanban", label: "Kanban", short: "k", section: "workspace" },
+  { id: "reports", label: "Reports", short: "r", section: "workspace" },
+  { id: "settings", label: "Settings", short: "s", section: "configuration" },
 ] as const satisfies readonly ShellView[];
 
 export const managerView = views[0];
 
-export const commandHelp = [
-  ...views.map(({ id, short }) => `/${id} (/${short})`),
-  "/help (/h)",
-].join(" · ");
+const slashCommands = [
+  ...views.map((view) => ({
+    id: view.id,
+    label: view.label,
+    short: view.short,
+    command: { kind: "navigate", view } as const,
+  })),
+  { id: "help", label: "Command help", short: "h", command: { kind: "help" } as const },
+];
+
+export const commandHelp = slashCommands.map(({ id, short }) => `/${id} (/${short})`).join(" · ");
+
+export function matchSlashCommands(value: string) {
+  const query = value.trim().toLowerCase();
+  if (!query.startsWith("/") || /\s/.test(query)) return [];
+  const prefix = query.slice(1);
+  return slashCommands.filter(({ id, short }) => id.startsWith(prefix) || short === prefix);
+}
 
 export function resolveCommand(value: string, viewId: string): ShellCommand {
   const command = value.trim().toLowerCase();
@@ -22,8 +36,6 @@ export function resolveCommand(value: string, viewId: string): ShellCommand {
   if (!command.startsWith("/") && viewId === managerView.id) {
     return { kind: "manager-prompt", text: value };
   }
-  if (command === "/help" || command === "/h") return { kind: "help" };
-
-  const view = views.find(({ id, short }) => command === `/${id}` || command === `/${short}`);
-  return view ? { kind: "navigate", view } : { kind: "unknown" };
+  return slashCommands.find(({ id, short }) => command === `/${id}` || command === `/${short}`)?.command
+    ?? { kind: "unknown" };
 }
