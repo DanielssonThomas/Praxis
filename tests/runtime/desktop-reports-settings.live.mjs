@@ -93,11 +93,11 @@ async function assertNarrow(app) {
   `), true, "The packaged WebKit must apply Tauri-nonced Angular component styles.");
 }
 
-async function customizeReports(app) {
+async function customizeReports(app, expanded = true) {
   const toggle = '[aria-controls="report-customization"]';
   await (await app.element(toggle)).type(enter);
-  await eventually(() => app.execute("return document.querySelector(arguments[0])?.getAttribute('aria-expanded') === 'true'",
-    toggle), "Keyboard activation did not open report customization.");
+  await eventually(() => app.execute("return document.querySelector(arguments[0])?.getAttribute('aria-expanded') === arguments[1]",
+    toggle, String(expanded)), "Keyboard activation did not change report customization.");
 }
 
 async function capture(app, name) {
@@ -235,6 +235,8 @@ test("packaged Reports charts operational values, scopes export, and clears hist
   await changeCollection(true);
   await app.waitForText('[data-metric="tokens"] [data-chart-summary]', /20 on/);
 
+  await customizeReports(app, false);
+  await app.execute("document.querySelector('[data-report-clear]').scrollIntoView({block:'center'})");
   await (await app.element("[data-report-clear]")).click();
   const keep = '#report-clear-confirmation button:first-of-type';
   await eventually(() => app.execute("return document.activeElement === document.querySelector(arguments[0])", keep),
