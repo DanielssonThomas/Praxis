@@ -10,6 +10,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { ManagementService } from "@praxis/management";
 import { OperationalStore } from "@praxis/state";
+import { skillEvaluation } from "../fixtures/skill-evaluation.mjs";
 import { startHermesFixture, stopProcess, until } from "./hermes-fixture.mjs";
 
 const findingKey = "stale-projection";
@@ -163,6 +164,7 @@ test("native Hermes workers propose and load selected knowledge and background r
     skillId, description: "Verify a persisted projection from a fresh process.", body: skillBody,
     owner: "Fixture workflow maintainer", lifecycle: "Review when projection behavior changes.",
     verification: "The fixture detected the superseded visible result and passed after a fresh read.",
+    evaluation: skillEvaluation(skillId),
   };
   const decision = {
     findingKey, revision, decision: "create", sourceInspected: "Operational tests and the curated catalog.",
@@ -170,6 +172,14 @@ test("native Hermes workers propose and load selected knowledge and background r
   };
   const reserved = await call(curator, "decide_skill_proposal", { ...decision, draft: { ...draft, skillId: "knowledge" } });
   assert.equal(reserved.code, "invalid_skill");
+  const wrongVersion = await call(curator, "decide_skill_proposal", {
+    ...decision, draft: { ...draft, evaluation: skillEvaluation(skillId, 2) },
+  });
+  assert.equal(wrongVersion.code, "invalid_skill");
+  const invalidEvaluation = await call(curator, "decide_skill_proposal", {
+    ...decision, draft: { ...draft, evaluation: { ...draft.evaluation, principleIds: ["AX-90"] } },
+  });
+  assert.equal(invalidEvaluation.code, "invalid_skill");
   assert.deepEqual((await call(curator, "decide_skill_proposal", decision)).skill, { skillId, version: 1 });
   const load = await worker.runtime.createAssignment(reads, "Read the selected published workflow.");
   assert.match((await completed(worker.runtime, load)).output.text, /Selected skill loaded/);

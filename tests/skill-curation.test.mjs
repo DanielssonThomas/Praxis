@@ -11,6 +11,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import * as mcp from "@praxis/mcp";
 import { OperationalStore } from "@praxis/state";
+import { skillEvaluation } from "./fixtures/skill-evaluation.mjs";
 
 const firstTask = { schemaVersion: 1, id: "task_fixture_one", title: "First fixture task" };
 const secondTask = { schemaVersion: 1, id: "task_fixture_two", title: "Second fixture task" };
@@ -110,6 +111,7 @@ const draft = {
   owner: "Engineering workflow maintainer",
   lifecycle: "Review after a relevant storage or projection change.",
   verification: "A replay fixture passes only after the persisted state is reread.",
+  evaluation: skillEvaluation(skillId),
 };
 
 function create(revision, overrides = {}) {
@@ -182,7 +184,8 @@ test("the curator checks stale reviews and publishes immutable versions for sele
   const manager = await restarted.connect("curator");
   const base = { findingKey, revision: 3, sourceInspected: "Existing curated skill", rationale: "Keep one owner." };
   const updated = await call(manager, "decide_skill_proposal", {
-    ...base, decision: "update", previousVersion: 1, draft: { ...draft, body: draft.body + "\nCheck from a new process." },
+    ...base, decision: "update", previousVersion: 1,
+    draft: { ...draft, body: draft.body + "\nCheck from a new process.", evaluation: skillEvaluation(skillId, 2) },
   });
   assert.deepEqual(updated.skill, { skillId, version: 2 });
   const selected = await call(worker, "load_curated_skill", { sessionId: firstSession.id, skillId, version: 1 });

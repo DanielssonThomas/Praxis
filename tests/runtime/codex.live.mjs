@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import { skillEvaluation } from "../fixtures/skill-evaluation.mjs";
 
 const corePolicy = {
   version: "1",
@@ -67,6 +68,7 @@ test("the pinned Codex worker reads its workspace, delivers policy and observes 
     draft: {
       skillId, description: skillDescription, body: skillBody, owner: "Fixture maintainer",
       lifecycle: "Review when the projection changes.", verification: "The fixture reproduces and detects stale output.",
+      evaluation: skillEvaluation(skillId),
     },
   }, "principal_fixture_curator", [selectedTask.id]);
   const published = registry.read({ skillId, version: 1 });

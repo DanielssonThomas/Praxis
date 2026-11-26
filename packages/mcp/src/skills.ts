@@ -24,6 +24,12 @@ export const inspectProposalsSchema = z.strictObject({ findingKey: findingKeySch
 export const reviewProposalsSchema = z.strictObject({ findingKey: findingKeySchema, revision, taskId: taskIdSchema });
 export const loadCuratedSkillSchema = skillSelectionSchema.extend({ sessionId: sessionIdSchema });
 
+const evaluationSchema = z.record(z.string(), z.json()).refine(
+  (definition) => JSON.stringify(definition).length <= 12_000,
+  "Supply one bounded Axiom evaluation definition.",
+);
+export type SkillEvaluation = z.infer<typeof evaluationSchema>;
+
 const draftSchema = z.strictObject({
   skillId: skillIdSchema,
   description: summary,
@@ -31,6 +37,7 @@ const draftSchema = z.strictObject({
   owner: summary,
   lifecycle: note,
   verification: note,
+  evaluation: evaluationSchema,
 });
 const reuseReference = z.union([skillSelectionSchema, z.strictObject({ ownerReference: summary })]);
 const decisionDetails = {
@@ -68,7 +75,7 @@ export interface PublishedSkill extends SkillSelection {
 type Proposal = z.infer<typeof proposedSkillSchema>;
 type Draft = z.infer<typeof draftSchema>;
 type Decision = z.infer<typeof decideProposalSchema>;
-type Validator = (skill: PublishedSkill) => void | Promise<void>;
+type Validator = (skill: PublishedSkill, evaluation: SkillEvaluation) => void | Promise<void>;
 type Write = "inserted" | "duplicate";
 
 export class SkillCurationError extends Error {
@@ -203,10 +210,11 @@ export class CuratedSkills {
     const { findingKey, revision: expected } = decision;
     this.#groupAccess(findingKey, taskIds);
     const payload = JSON.stringify(decision);
-    const publication = decision.decision === "create" || decision.decision === "update" ? render(
-      decision.draft, decision.decision === "create" ? 1 : decision.previousVersion + 1,
-    ) : undefined;
-    if (publication) await this.#validate(publication);
+    let publication: PublishedSkill | undefined;
+    if (decision.decision === "create" || decision.decision === "update") {
+      publication = render(decision.draft, decision.decision === "create" ? 1 : decision.previousVersion + 1);
+      await this.#validate(publication, decision.draft.evaluation);
+    }
     return this.#write(() => {
       this.#groupAccess(findingKey, taskIds);
       const existing = this.#database.prepare(

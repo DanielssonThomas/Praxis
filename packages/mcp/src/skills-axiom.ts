@@ -4,7 +4,7 @@ import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { SkillCurationError } from "./skills.js";
-import type { PublishedSkill } from "./skills.js";
+import type { PublishedSkill, SkillEvaluation } from "./skills.js";
 
 const execute = promisify(execFile);
 const revision = "96014e73ca14111be83c448898e41559f0f87f88";
@@ -20,6 +20,7 @@ interface PolicyModule {
     profiles: [];
     checks: Record<string, never>;
     skills: PolicySource[];
+    evaluations: PolicySource[];
   }, profiles: []): { policy?: unknown; diagnostics: readonly unknown[] };
 }
 
@@ -35,11 +36,18 @@ export async function loadSkillValidator(root: string) {
       readdir(join(root, "skills"), { withFileTypes: true }),
     ]);
     const reserved = new Set(directories.filter((entry) => entry.isDirectory()).map((entry) => entry.name));
-    return ({ skillId, markdown }: PublishedSkill) => {
+    return ({ skillId, version, markdown }: PublishedSkill, evaluation: SkillEvaluation) => {
       if (reserved.has(skillId)) throw new SkillCurationError("invalid_skill", "Use the canonical Axiom skill for this name.");
+      const target = evaluation.skill;
+      if (target === null || typeof target !== "object" || Array.isArray(target)
+        || target.id !== skillId || target.version !== String(version)) {
+        throw new SkillCurationError("invalid_skill", "The Axiom evaluation must target this skill and version.");
+      }
+      const path = "skills/" + skillId;
       const result = modules.resolvePolicy({
         core: { path: "core/AXIOMS.md", version: "1", text }, profiles: [], checks: {},
-        skills: [{ path: "skills/" + skillId + "/SKILL.md", text: markdown }],
+        skills: [{ path: path + "/SKILL.md", text: markdown }],
+        evaluations: [{ path: path + "/evals/curation.json", text: JSON.stringify(evaluation) }],
       }, []);
       if (!result.policy || result.diagnostics.length > 0) {
         throw new SkillCurationError("invalid_skill", "The published Markdown failed pinned Axiom skill validation.");
