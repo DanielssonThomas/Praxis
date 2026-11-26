@@ -3,7 +3,7 @@
   (activityToggled)="activity.toggle()" />
 <div class="workspace">
   <main>
-    <praxis-host-launch />
+    @if (navigation.view().id !== 'setup') { <praxis-host-launch /> }
     <router-outlet />
   </main>
   @if (activity.supported) {

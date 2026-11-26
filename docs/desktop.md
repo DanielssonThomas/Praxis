@@ -69,6 +69,18 @@ Generation writes `apps/desktop/src/generated/desktop-ipc.ts`. Check in that out
 
 The readiness command queries the supervised Node host and returns the running Node version when it is ready. Starting returns a null version and a bounded retry interval in milliseconds. The ready reply omits the retry interval. The Rust interval is a `u16`, which JavaScript represents exactly. Errors use stable codes and redacted messages. The native smoke verifies the displayed state against the running sidecar version.
 
+## Local setup
+
+In the Linux x64 package, open **Menu → Setup**, or enter `/setup` or `/su` in the command bar.
+
+1. **Local host** shows the startup result for the packaged Node.js sidecar. Check the desktop installation and choose **Retry local host** if startup fails.
+2. **Hermes profile** links to the existing Settings editor and gives the pinned [named Manager installation and connection steps](hermes-manager.md). Set the Hermes profile name in Settings and match it to the named gateway path in the desktop launch environment.
+3. **Operator access** explains the local operator token and opens Manager. Use the [operator access setup](approvals.md#configure-operator-access) to configure its digest, then enter the token in the existing Manager unlock form.
+
+The ready indication and version on the first step come from the supervised local host. Manager checks the authenticated named profile by loading its transcript on unlock. [Hermes Manager setup](hermes-manager.md#verify-the-setup) documents the separate native Axiom checks. [Release verification](https://github.com/DanielssonThomas/Praxis/issues/24) owns the clean-install exercise and final packaged artifact.
+
+Run `node --test tests/runtime/desktop-setup.live.mjs` with the package, pinned Hermes and display setup from native validation. The test temporarily withholds the packaged sidecar from a disposable extraction, recovers through Setup, then unlocks the named Manager using a disposable Hermes profile and loopback provider.
+
 ## Manager and Overview
 
 Open **Manager** and enter the local operator credential. Text in the permanent command bar starts a turn on the configured named Hermes profile. The command shortcuts remain available while replies stream. A disconnected turn keeps the original prompt and turn ID in memory for reconnect. Reopening Manager reads the bounded user and assistant transcript from that same authenticated Hermes session. Related cards follow the Node host's work scope and saved automatic presentation preference.
