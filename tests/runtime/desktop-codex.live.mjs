@@ -351,11 +351,11 @@ test("packaged Manager approves one bounded Codex edit and restores its verified
     return usage.id;
   };
   const usageId = await assertDetails();
+  t.diagnostic("The single native Codex run completed with its expected output and reported usage.");
   await command("/m");
-  await desktop.waitForText("h1", "Manager");
+  if (provider) await unlock("Open Manager");
+  await desktop.waitForText("#manager-lock", "Lock manager");
   if (provider) {
-    await unlock("Open Manager");
-    await desktop.waitForText("#manager-lock", "Lock manager");
     assert.equal((await confirmManager(accepted, replayPrompt, "The original request was replayed.")).id, intent.id);
     assert.equal(store.eventsOfKind("action.requested").filter(({ details }) => details?.action.target.id === accepted.task.id).length, 1);
     provider.assertLaunches(1);
