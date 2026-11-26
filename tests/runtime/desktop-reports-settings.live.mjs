@@ -83,6 +83,12 @@ async function assertNarrow(app) {
     const main = document.querySelector("main");
     return window.innerWidth <= 390 && main.scrollWidth <= main.clientWidth;
   `), "The rendered desktop view did not fit its narrow viewport.");
+  assert.equal(await app.execute(`
+    const shell = document.querySelector("praxis-shell");
+    const nonce = shell.getAttribute("ngCspNonce");
+    const authenticatedStyle = [...document.querySelectorAll("style")].some((style) => style.nonce === nonce);
+    return !!nonce && nonce !== "__TAURI_STYLE_NONCE__" && authenticatedStyle && getComputedStyle(shell).display === "grid";
+  `), true, "The packaged WebKit must apply Tauri-nonced Angular component styles.");
 }
 
 async function capture(app, name) {
