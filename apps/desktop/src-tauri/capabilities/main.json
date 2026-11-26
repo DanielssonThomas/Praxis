@@ -1,7 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Local host launch status and retry in the primary Praxis window.",
+  "description": "Local host and authorized Kanban commands in the primary Praxis window.",
   "windows": ["main"],
-  "permissions": ["allow-host-status", "allow-retry-host"]
+  "permissions": [
+    "allow-host-status",
+    "allow-retry-host",
+    "allow-kanban-list",
+    "allow-kanban-unlock",
+    "allow-kanban-lock",
+    "allow-kanban-link-issue",
+    "allow-kanban-open-issue"
+  ]
 }

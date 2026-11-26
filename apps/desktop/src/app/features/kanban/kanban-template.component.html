@@ -1,2 +1,25 @@
-<h1>Kanban</h1>
-<p role="status">The desktop task board is unavailable.</p>
+<header>
+  <h1>Kanban</h1>
+  @if (kanban.stage() === "ready") {
+    <div class="actions">
+      <button praxisButton type="button" id="kanban-refresh" [disabled]="kanban.busy()" (click)="kanban.refresh()">
+        Refresh board
+      </button>
+      <button praxisButton type="button" [disabled]="kanban.busy()" (click)="kanban.lock()">Lock board</button>
+    </div>
+  }
+</header>
+<p id="kanban-status" role="status" [class.quiet]="!kanban.status()">{{ kanban.status() }}</p>
+
+@if (kanban.stage() === "locked") {
+  <praxis-operator-unlock formName="Open Kanban" action="Open board" [busy]="kanban.busy()"
+    (credentialSubmitted)="kanban.unlock($event)" />
+}
+
+@if (kanban.stage() === "ready") {
+  @if (kanban.providerMessage(); as message) {
+    <p id="kanban-provider">{{ message }}</p>
+  }
+  <praxis-kanban-board [columns]="kanban.columns()" [canLink]="kanban.canLink()" [busy]="kanban.busy()"
+    (linkIssue)="kanban.link($event)" (openIssue)="kanban.open($event)" (invalidIssue)="kanban.invalidIssue()" />
+}

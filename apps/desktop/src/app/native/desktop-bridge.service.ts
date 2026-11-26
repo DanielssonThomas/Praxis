@@ -7,4 +7,9 @@ export class DesktopBridge {
   readonly available = isTauri();
   readonly hostStatus = commands.hostStatus;
   readonly retryHost = commands.retryHost;
+  readonly kanbanList = commands.kanbanList;
+  readonly kanbanUnlock = commands.kanbanUnlock;
+  readonly kanbanLock = commands.kanbanLock;
+  readonly kanbanLinkIssue = commands.kanbanLinkIssue;
+  readonly kanbanOpenIssue = commands.kanbanOpenIssue;
 }
