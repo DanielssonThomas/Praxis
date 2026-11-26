@@ -1,2 +1,17 @@
-<h1>Manager</h1>
-<p role="status">The desktop Manager connection is unavailable.</p>
+<header>
+  <h1>Manager</h1>
+  @if (manager.unlocked()) {
+    <button praxisButton type="button" id="manager-lock" (click)="manager.lock()">Lock manager</button>
+  }
+</header>
+@if (manager.supported && !manager.unlocked()) {
+  <praxis-operator-unlock formName="Open Manager" action="Open manager"
+    [busy]="manager.unlocking()" (credentialSubmitted)="manager.unlock($event)" />
+}
+<p role="status">{{ manager.status() }}</p>
+@if (manager.unlocked()) {
+  <praxis-manager-conversation />
+  @if (manager.reconnectable()) {
+    <button praxisButton type="button" id="manager-reconnect" (click)="manager.reconnect()">Reconnect</button>
+  }
+}

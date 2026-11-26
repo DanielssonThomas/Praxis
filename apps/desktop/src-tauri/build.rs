@@ -7,6 +7,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "kanban_lock",
         "kanban_link_issue",
         "kanban_open_issue",
+        "unlock_manager",
+        "lock_manager",
+        "manager_turn",
+        "unlock_overview",
+        "lock_overview",
+        "read_overview",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(commands))?;
     Ok(())

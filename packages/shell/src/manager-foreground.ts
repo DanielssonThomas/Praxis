@@ -107,6 +107,19 @@ export async function managerForegroundFromEnv(settingsFile: string, readManager
       response.writeHead(204, { "Cache-Control": "no-store" }).end();
       return true;
     }
+    if (request.method === "GET" && process.env.PRAXIS_DESKTOP_HOST === "1") {
+      try {
+        const history = await runtime.readTurnHistory(foregroundSession);
+        response.writeHead(200, {
+          "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store",
+        }).end(JSON.stringify(history.map(({ role, text }) => ({
+          role, text: role === "assistant" ? splitManagerReferences(text).text : text,
+        }))));
+      } catch {
+        sendError(response, 503, "The named manager history is unavailable.");
+      }
+      return true;
+    }
     if (request.method !== "POST") {
       response.setHeader("Allow", "HEAD, POST");
       sendError(response, 405, "Submit a foreground turn with POST.");

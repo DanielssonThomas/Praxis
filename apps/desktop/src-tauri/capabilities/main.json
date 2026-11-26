@@ -1,15 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Local host and authorized Kanban commands in the primary Praxis window.",
+  "description": "Scoped commands for the local host, Manager, Overview, and Kanban in the primary Praxis window.",
   "windows": ["main"],
   "permissions": [
-    "allow-host-status",
-    "allow-retry-host",
-    "allow-kanban-list",
-    "allow-kanban-unlock",
-    "allow-kanban-lock",
-    "allow-kanban-link-issue",
-    "allow-kanban-open-issue"
+    "allow-host-status", "allow-retry-host",
+    "allow-unlock-manager", "allow-lock-manager", "allow-manager-turn",
+    "allow-unlock-overview", "allow-lock-overview", "allow-read-overview",
+    "allow-kanban-list", "allow-kanban-unlock", "allow-kanban-lock",
+    "allow-kanban-link-issue", "allow-kanban-open-issue"
   ]
 }

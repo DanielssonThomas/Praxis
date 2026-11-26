@@ -6,6 +6,7 @@ mod state;
 use services::host_http::HostClient;
 use specta_typescript::Typescript;
 use state::host::ManagedHost;
+use state::manager_stream::ManagerStreams;
 use state::operator::OperatorSessions;
 use std::path::Path;
 use tauri::{Manager, RunEvent};
@@ -19,8 +20,9 @@ pub fn run() -> tauri::Result<()> {
         .setup(|app| {
             let root = app.path().resource_dir()?.join("host");
             app.manage(HostClient::new()?);
-            app.manage(OperatorSessions::default());
             app.manage(ManagedHost::start(root)?);
+            app.manage(OperatorSessions::default());
+            app.manage(ManagerStreams::default());
             Ok(())
         })
         .invoke_handler(commands::registry().invoke_handler())
