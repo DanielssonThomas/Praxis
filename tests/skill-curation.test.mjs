@@ -226,3 +226,46 @@ test("background management refuses a curator credential", async (t) => {
   }), { code: 1, stderr: "Background management is unavailable. Check its local configuration and command.\n" });
   assert.equal(store.management.list().length, 0);
 });
+
+test("background reviewers can retrieve the exact queued revision after a later finding", async (t) => {
+  const { start } = await fixture(t);
+  const { connect, store } = await start();
+  const [worker, curator, reviewer] = await Promise.all([
+    connect("worker"), connect("curator"), connect("reviewer"),
+  ]);
+  await call(worker, "propose_skill", finding());
+  const request = await call(curator, "request_skill_review", { findingKey, revision: 1, taskId: firstTask.id });
+  assert.equal(request.write, "inserted");
+  await call(worker, "propose_skill", finding(firstSession, "later"));
+  const latest = await call(reviewer, "inspect_skill_proposals", { findingKey });
+  assert.equal(latest.group.revision, 2);
+  const queued = await call(reviewer, "inspect_skill_proposals", { findingKey, revision: 1 });
+  assert.equal(queued.error, false, "The background reviewer must be able to select the queued revision.");
+  assert.equal(queued.group.revision, 1);
+  assert.deepEqual(queued.group.findings.map(({ submissionId }) => submissionId), ["event_knowledge_first"]);
+  assert.match(store.management.list()[0].work.instruction, /"revision"\s*:\s*1/);
+});
+
+test("grouped evidence is paginated against a stable revision", async (t) => {
+  const { start } = await fixture(t);
+  const { connect } = await start();
+  const [worker, curator] = await Promise.all([connect("worker"), connect("curator")]);
+  for (let index = 1; index <= 53; index++) {
+    assert.equal((await call(worker, "propose_skill", finding(firstSession, String(index)))).write, "inserted");
+  }
+  const first = (await call(curator, "inspect_skill_proposals", { findingKey })).group;
+  assert.equal(first.total, 53);
+  assert.equal(first.findings.length, 50);
+  assert.ok(first.nextBefore, "The first page must offer a cursor for the older findings.");
+  await call(worker, "propose_skill", finding(firstSession, "inserted-between-pages"));
+  const older = await call(curator, "inspect_skill_proposals", {
+    findingKey, revision: first.revision, before: first.nextBefore,
+  });
+  assert.equal(older.error, false);
+  assert.equal(older.group.revision, first.revision);
+  assert.equal(older.group.total, 53);
+  assert.deepEqual(older.group.findings.map(({ submissionId }) => submissionId), [
+    "event_knowledge_3", "event_knowledge_2", "event_knowledge_1",
+  ]);
+  assert.equal(older.group.nextBefore, undefined);
+});
