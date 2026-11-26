@@ -27,7 +27,7 @@ jobs:
       - name: Select tracked source and prepare evidence
         run: |
           set -euo pipefail
-          source=77465deaab77f39cc92889801bdb7f95e73c5b2f
+          source=1461eca30d331838107d9111584861a9c0028fac
           git checkout --detach "$source"
           mkdir -p "$RUNNER_TEMP/praxis-57-evidence"
           {
