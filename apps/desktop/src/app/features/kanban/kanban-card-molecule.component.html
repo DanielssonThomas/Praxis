@@ -5,7 +5,7 @@
   <h3>
     <button praxisButton type="button" [id]="id" aria-haspopup="dialog" aria-controls="kanban-task-details"
       [attr.aria-describedby]="id + '-identity ' + id + '-summary'"
-      (click)="opened.emit(item.nativeId)">{{ item.task.title }}</button>
+      (click)="opened.emit(item.nativeId)"><span class="title">{{ item.task.title }}</span></button>
   </h3>
   <p class="summary" [id]="id + '-summary'">
     <span>{{ item.assignee || "Unassigned" }}</span>

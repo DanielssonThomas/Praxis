@@ -30,6 +30,13 @@ h3 button {
 h3 button:focus-visible { outline: none; }
 h3 button::after { position: absolute; inset: 0; content: ""; }
 
+.title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
 .identity, .summary { color: var(--muted); font-size: 0.75rem; }
 .summary { display: flex; flex-wrap: wrap; gap: 0.2rem 0.55rem; }
 .issue { color: var(--accent); }
