@@ -60,7 +60,8 @@ textarea {
   textarea:not(:placeholder-shown) { min-block-size: 3.5rem; }
 }
 
-textarea::placeholder { color: var(--muted); }
+textarea:placeholder-shown { overflow: hidden; white-space: nowrap; }
+textarea::placeholder { color: var(--muted); text-overflow: ellipsis; }
 
 .send {
   display: grid;

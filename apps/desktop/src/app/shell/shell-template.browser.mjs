@@ -48,6 +48,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 360, height: 620 
     await assertLayout(page);
     assert.ok(await nav.getByRole("group", { name: "Workspace" }).getByRole("link", { name: "Manager" }).isVisible());
     assert.ok(await nav.getByRole("group", { name: "Configuration" }).getByRole("link", { name: "Settings" }).isVisible());
+    assert.equal(await nav.evaluate((node) => node.scrollWidth <= node.clientWidth), true, "the rail fits its viewport");
     const [rail, content] = await Promise.all([nav.boundingBox(), page.getByRole("main").boundingBox()]);
     const railIsLeft = rail.x + rail.width <= content.x;
     const railIsAbove = rail.y + rail.height <= content.y;

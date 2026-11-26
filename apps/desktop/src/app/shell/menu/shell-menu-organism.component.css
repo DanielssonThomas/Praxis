@@ -103,7 +103,7 @@ a[aria-current="page"] { box-shadow: inset 2px 0 var(--accent); }
 @media (max-width: 42rem) {
   nav {
     display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1.75fr) minmax(7.5rem, 1fr);
     gap: 0.45rem;
     inline-size: auto;
     max-block-size: 27dvh;
@@ -116,5 +116,6 @@ a[aria-current="page"] { box-shadow: inset 2px 0 var(--accent); }
   .brand { grid-column: 1 / -1; padding-block: 0.25rem; }
   .section + .section { margin-block-start: 0; }
   #nav-workspace + .destinations { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  h2 { margin-inline: 0.55rem; letter-spacing: 0.12em; }
   a { padding-inline: 0.55rem; }
 }
