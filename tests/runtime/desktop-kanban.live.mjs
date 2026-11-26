@@ -132,6 +132,10 @@ test("the packaged Kanban follows live native states and saves one scoped GitHub
   const issue = (nativeStatus) => card(nativeStatus) + ' [aria-label="Open fixture/project#42 in the browser"]';
   await desktop.waitForText(card("ready") + " h3", title);
   assert.equal(await desktop.execute("return window.innerWidth"), 390);
+  assert.equal(await desktop.execute("return getComputedStyle(document.querySelector('praxis-kanban-board .board')).display"),
+    "grid", "the packaged WebView must apply Angular component styles");
+  assert.equal(await desktop.execute("return getComputedStyle(document.querySelector('praxis-shell')).display"),
+    "grid", "the packaged shell must retain its grid layout");
   assert.equal(await desktop.execute("return document.querySelector('main').scrollWidth <= document.querySelector('main').clientWidth"), true);
   await linkByKeyboard(desktop, card("ready"), "invalid-input");
   await desktop.waitForText(boardStatus, /owner\/repo#42/i);
