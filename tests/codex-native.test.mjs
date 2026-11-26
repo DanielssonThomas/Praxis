@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { CodexExecutor } from "@praxis/codex-runtime";
 import { CodexRun } from "../packages/codex-runtime/dist/native.js";
 
@@ -13,6 +15,29 @@ async function program(t, text) {
   await writeFile(binary, "#!/usr/bin/env node\n" + text, { mode: 0o700 });
   return { program: binary, workspace, home: workspace, userHome: workspace, environment: { PATH: process.env.PATH } };
 }
+
+test("the account fixture diagnoses a missing native login before worker startup", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "praxis-codex-account-preflight-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const accountHome = join(directory, "signed-out-fixture");
+  await mkdir(accountHome);
+  const accountTest = fileURLToPath(new URL("./runtime/codex.account.mjs", import.meta.url));
+  const result = spawnSync(process.execPath, ["--test", accountTest], {
+    encoding: "utf8",
+    env: {
+      HOME: directory,
+      PRAXIS_RUN_CODEX_ACCOUNT: "1",
+      PRAXIS_CODEX_BIN: join(directory, "unavailable-codex"),
+      PRAXIS_AXIOM_ROOT: directory,
+      PRAXIS_CODEX_ACCOUNT_HOME: accountHome,
+      PRAXIS_CODEX_MODEL: "fixture-model",
+    },
+  });
+  const output = result.stdout + result.stderr;
+  assert.equal(result.status, 1, output);
+  assert.match(output, /Complete file-based Codex login in the selected dedicated home/);
+  assert.equal(output.includes(accountHome), false, "account paths belong outside validation output");
+});
 
 test("native launch fails closed for an unsupported observed Codex version", { skip: process.platform !== "linux" }, async (t) => {
   const profile = await program(t, 'console.log("codex-cli 0.171.0");');
