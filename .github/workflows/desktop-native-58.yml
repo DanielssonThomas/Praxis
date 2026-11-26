@@ -1,0 +1,78 @@
+name: Packaged Reports and Settings
+
+on:
+  push:
+    branches: [codex/58-ubuntu-verification]
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: Linux x64 Reports and Settings
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      CARGO_PROFILE_DEV_DEBUG: 0
+      GDK_BACKEND: x11
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: 97dc5db94c17b730dab6748da7b2a64ccf11eabd
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Install native build and test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
+            webkit2gtk-driver xvfb xauth dbus-x11
+      - run: npm ci
+      - name: Verify workspace and browser regressions
+        run: |
+          npm test
+          npm run typecheck
+          npm run build
+          npm run check:desktop-composition
+          npm run check:desktop-rust
+          npm exec -- playwright install chromium
+          npm run test:browser
+          npm run test:desktop
+      - name: Verify Rust and recorded bindings
+        run: |
+          (cd apps/desktop/src-tauri && cargo fmt --all -- --check && cargo test --locked && cargo clippy --locked --all-targets -- -D warnings)
+          npm run check:desktop-ipc
+          npm run test:desktop-ipc-drift
+      - name: Build the development package
+        run: |
+          npm run package:desktop
+          package="$PWD/apps/desktop/src-tauri/target/debug/bundle/deb/Praxis_0.1.0_amd64.deb"
+          PRAXIS_DESKTOP_EVIDENCE_DIR="$RUNNER_TEMP/praxis-reports-settings"
+          mkdir -p "$PRAXIS_DESKTOP_EVIDENCE_DIR"
+          cp "$package" "$PRAXIS_DESKTOP_EVIDENCE_DIR/"
+          printf 'PRAXIS_DESKTOP_DEB=%s\n' "$package" >> "$GITHUB_ENV"
+          printf 'PRAXIS_DESKTOP_EVIDENCE_DIR=%s\n' "$PRAXIS_DESKTOP_EVIDENCE_DIR" >> "$GITHUB_ENV"
+          (cd "$PRAXIS_DESKTOP_EVIDENCE_DIR" && sha256sum "$(basename "$package")" > SHA256SUMS)
+          git rev-parse HEAD > "$PRAXIS_DESKTOP_EVIDENCE_DIR/source-revision.txt"
+      - name: Observe packaged Reports and Settings
+        run: |
+          set -o pipefail
+          {
+            uname -smr
+            grep '^PRETTY_NAME=' /etc/os-release
+            node --version
+            npm --version
+            pkg-config --modversion gtk+-3.0 webkit2gtk-4.1
+            xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- npm run test:desktop:reports-settings
+          } | tee "$PRAXIS_DESKTOP_EVIDENCE_DIR/native-validation.txt"
+      - name: Upload package and native evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: reports-settings-linux-evidence
+          path: ${{ runner.temp }}/praxis-reports-settings
+          if-no-files-found: ignore
