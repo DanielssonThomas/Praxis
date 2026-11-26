@@ -31,9 +31,16 @@ The installer creates the default `praxis-manager` profile, configures its local
 
 ## Connect the Manager
 
-1. Follow the named-profile guide to configure Hermes's model login and the scoped Praxis MCP grant. Keep the provider credential in Hermes and the MCP bearer in the profile's private environment file. Set the installed app's `PRAXIS_MCP_CONFIG_FILE` to the local authority file. [Connect the named profile](hermes-manager.md#connect-the-installed-profile)
-2. Start the Hermes gateway under the dedicated root with `/usr/lib/Praxis/host/bin` on its `PATH`. Configure Praxis with the named profile URL and bearer using `PRAXIS_HERMES_ORIGIN` and `PRAXIS_HERMES_API_KEY`. Use the extracted runtime directory for `PRAXIS_AXIOM_ROOT` when enabling the local skill validator or for the `axiomRoot` setting in Codex delegation configuration. [Hermes connection](hermes-runtime.md) · [Codex worker configuration](codex-worker.md)
-3. Set `PRAXIS_OPERATOR_TOKEN_DIGEST` to the SHA-256 hex digest of a separate operator token. Reopen Praxis and enter the original token in Manager. Missing or stopped local host resources appear in the desktop window with a retry action. [Operator access](manager-foreground.md)
+Configure Hermes's model login and the scoped Praxis MCP grant. Keep the provider credential in Hermes and the MCP bearer in the profile's private environment file. Start the installed MCP service with your local authority file. [Connect the named profile](hermes-manager.md#connect-the-installed-profile)
+
+```sh
+PRAXIS_MCP_CONFIG_FILE=/absolute/path/to/authority.json \
+  /usr/lib/Praxis/host/bin/node /usr/lib/Praxis/host/node_modules/@praxis/mcp/dist/cli.js
+```
+
+Start the Hermes gateway under the dedicated root with `/usr/lib/Praxis/host/bin` on its `PATH`. Set `PRAXIS_MCP_CONFIG_FILE` in the Praxis launch environment to the same authority file. Configure the named profile URL and bearer using `PRAXIS_HERMES_ORIGIN` and `PRAXIS_HERMES_API_KEY`. Use the extracted runtime directory for `PRAXIS_AXIOM_ROOT` when enabling the local skill validator or for the `axiomRoot` setting in Codex delegation configuration. [Hermes connection](hermes-runtime.md) · [Codex worker configuration](codex-worker.md)
+
+Set `PRAXIS_OPERATOR_TOKEN_DIGEST` to the SHA-256 hex digest of a separate operator token. Reopen Praxis and enter the original token in Manager. Missing or stopped local host resources appear in the desktop window with a retry action. [Operator access](manager-foreground.md)
 
 ## Upgrade
 

@@ -104,7 +104,7 @@ for (const viewport of [wide, narrow]) {
     await page.getByText("PRAXIS_HERMES_ORIGIN", { exact: true }).waitFor();
     assert.equal(await page.getByText("PRAXIS_MCP_CONFIG_FILE", { exact: true }).count(), 1,
       "the guide identifies the authority file required by the configured local host");
-    assert.match(await guide.getByRole("link", { name: "Axiom v1.0.0" }).getAttribute("href"), /Axiom\/releases\/tag\/v1\.0\.0$/);
+    assert.match(await page.getByRole("link", { name: "Axiom v1.0.0", exact: true }).getAttribute("href"), /Axiom\/releases\/tag\/v1\.0\.0$/);
     await assertLayout(page);
     await capture(page, `setup-profile-${viewport.width}`);
     await next.press("Enter");

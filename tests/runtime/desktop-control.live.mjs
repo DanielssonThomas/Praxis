@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -10,7 +9,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { createPraxisMcpServer } from "@praxis/mcp";
 import { OperationalStore } from "@praxis/state";
-import { enter, eventually, startDesktop } from "./desktop-fixture.mjs";
+import { desktopPackageRoot, enter, eventually, startDesktop } from "./desktop-fixture.mjs";
 import { startHermesFixture, until } from "./hermes-fixture.mjs";
 
 const digest = (value) => createHash("sha256").update(value).digest("hex");
@@ -61,8 +60,7 @@ test("the packaged operator denies, fences and approves exact real Hermes worker
     await rm(directory, { recursive: true, force: true, maxRetries: 4, retryDelay: 100 });
   });
 
-  const installed = join(directory, "installed");
-  execFileSync("dpkg-deb", ["--extract", packagePath, installed]);
+  const installed = desktopPackageRoot(packagePath, directory);
   const binary = join(installed, "usr/bin/praxis-desktop");
   const manual = worker("manual", manualTitle);
   const denied = worker("denied", denyTitle);

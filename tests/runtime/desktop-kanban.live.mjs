@@ -9,7 +9,7 @@ import { isAbsolute, join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import { OperationalStore } from "@praxis/state";
-import { enter, eventually, startDesktop, tab } from "./desktop-fixture.mjs";
+import { desktopPackageRoot, enter, eventually, startDesktop, tab } from "./desktop-fixture.mjs";
 
 const execute = promisify(execFile);
 const title = "Native Hermes board desktop fixture";
@@ -48,7 +48,7 @@ test("the packaged Kanban follows live native states and saves one scoped GitHub
   const home = join(directory, ".hermes");
   const database = join(directory, "state.sqlite");
   const bin = join(directory, "bin");
-  const installed = join(directory, "installed");
+  const installed = desktopPackageRoot(packagePath, directory);
   const binary = join(installed, "usr/bin/praxis-desktop");
   const operator = randomBytes(32).toString("base64url");
   const providerKey = randomBytes(32).toString("base64url");
@@ -79,7 +79,6 @@ test("the packaged Kanban follows live native states and saves one scoped GitHub
     }
   });
 
-  execFileSync("dpkg-deb", ["--extract", packagePath, installed], { timeout: 20_000 });
   await mkdir(home);
   await mkdir(bin);
   await writeFile(join(bin, "gio"), [

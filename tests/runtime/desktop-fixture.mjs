@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
+import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const desktopEnvironmentKeys = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'DISPLAY', 'XAUTHORITY',
@@ -50,8 +51,14 @@ async function request(origin, method, pathname, payload, timeout = 6_000) {
   return value;
 }
 
+export function desktopPackageRoot(deb, directory) {
+  if (process.env.PRAXIS_DESKTOP_USE_INSTALLED === '1') return '/';
+  const extracted = join(directory, 'installed');
+  execFileSync('dpkg-deb', ['--extract', deb, extracted], { timeout: 20_000 });
+  return extracted;
+}
+
 export async function startDesktop(binary, { environment = {}, args = [], startupTimeout = 25_000 } = {}) {
-  const executable = process.env.PRAXIS_DESKTOP_USE_INSTALLED === '1' ? '/usr/bin/praxis-desktop' : binary;
   const port = await loopbackPort();
   const origin = `http://127.0.0.1:${port}`;
   const hostDesktop = Object.fromEntries(desktopEnvironmentKeys.flatMap((key) =>
@@ -99,7 +106,7 @@ export async function startDesktop(binary, { environment = {}, args = [], startu
       }
     }, 'WebKitWebDriver did not become ready.');
     const opened = await request(origin, 'POST', '/session', {
-      capabilities: { alwaysMatch: { 'webkitgtk:browserOptions': { binary: executable, args } } },
+      capabilities: { alwaysMatch: { 'webkitgtk:browserOptions': { binary, args } } },
     }, startupTimeout);
     session = opened.sessionId;
     assert.equal(typeof session, 'string');
