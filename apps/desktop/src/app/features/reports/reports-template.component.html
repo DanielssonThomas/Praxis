@@ -1,2 +1,47 @@
 <h1>Reports</h1>
-<p role="status">Local reports are unavailable in this desktop build.</p>
+<p data-reports-status role="status">{{ status() }}</p>
+@if (report(); as current) {
+  <div class="controls">
+    <label>
+      Range
+      <select #range name="reportRange" [value]="current.days" [disabled]="busy()" (change)="changeRange(range)">
+        @for (days of ranges; track days) {
+          <option [value]="days" [disabled]="days > current.preferences.retentionDays">{{ days }} days</option>
+        }
+      </select>
+    </label>
+    <button praxisButton type="button" [disabled]="busy()" (click)="lock()">Lock reports</button>
+  </div>
+  @if (current.preferences.collectionEnabled) {
+    <p>Charts use UTC. Missing measurements appear as gaps.</p>
+    <div class="metrics">
+      @for (metric of activeMetrics(); track metric.metric) {
+        <praxis-report-chart [display]="metric" [buckets]="current.buckets" [days]="current.days" />
+      } @empty {
+        <p>Choose a visible metric to display a chart.</p>
+      }
+    </div>
+  } @else {
+    <p>Report collection is paused. The operational audit continues.</p>
+  }
+  <h2>Report preferences</h2>
+  <praxis-report-preferences [preferences]="current.preferences" [busy]="busy()"
+    (metricsChanged)="visible.set($event)" (submitted)="savePreferences($event)" />
+  <div class="actions">
+    <button praxisButton type="button" data-report-export
+      [disabled]="busy() || !current.preferences.allowExport || !current.preferences.collectionEnabled"
+      (click)="exportReport()">Export JSON</button>
+    <button praxisButton type="button" data-report-clear
+      [disabled]="busy() || !current.preferences.allowClearHistory"
+      (click)="confirmingClear.set(true)">Clear report history</button>
+  </div>
+  @if (confirmingClear()) {
+    <div class="confirmation" role="group" aria-label="Confirm clearing report history">
+      <p>Previously dated observations will be hidden from reports. The operational audit will be kept.</p>
+      <button praxisButton type="button" data-confirm-report-clear (click)="clearHistory()">Confirm clear</button>
+      <button praxisButton type="button" (click)="confirmingClear.set(false)">Keep history</button>
+    </div>
+  }
+} @else if (native) {
+  <praxis-operator-unlock formName="Open reports" action="Open reports" [busy]="busy()" (credentialSubmitted)="unlock($event)" />
+}

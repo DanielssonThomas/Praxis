@@ -2,6 +2,8 @@
 
 Run `npm run build` and `npm start` from the workspace, then open `http://127.0.0.1:3210/settings`. Set `PRAXIS_PORT` to change the loopback port.
 
+In the [packaged desktop](desktop.md), open **Settings** or run `/settings`. It reads the same existing settings file and saves through the local host's validation and atomic replacement. See the [native Reports and Settings workflow](reports.md#verify-the-packaged-views) for restart and upgrade checks.
+
 The editor reads and saves one versioned JSON file at `$XDG_CONFIG_HOME/praxis/settings.json` or `~/.config/praxis/settings.json`. Set `PRAXIS_CONFIG_FILE` to use a different file. A fresh install reads defaults and creates the file on the first save. Move or back up this file to transfer the preferences, and use the settings screen or a text editor to update it. The settings service validates the full document before saving and preserves the previous file when validation fails.
 
 The file records selected Axiom profiles, the Hermes manager profile and model, worker runtime and model preferences, optional task budget caps, engineering memory, and automatic visual presentation. A blank model follows the selected runtime's default. An unset budget leaves the corresponding Praxis cap unspecified.

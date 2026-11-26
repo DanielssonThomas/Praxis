@@ -8,6 +8,11 @@ pub(crate) enum IpcErrorCode {
     HostTimedOut,
     InvalidHostResponse,
     HostRetryFailed,
+    FeatureUnavailable,
+    InvalidInput,
+    OperatorCredentialRequired,
+    OperatorCredentialRejected,
+    OperationRejected,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Type)]

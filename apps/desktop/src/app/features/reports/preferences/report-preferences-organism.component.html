@@ -1,0 +1,25 @@
+<form #form aria-label="Report preferences" (submit)="submit($event)">
+  <fieldset [disabled]="busy()">
+    <legend>Visible metrics</legend>
+    @for (item of metrics; track item.metric) {
+      <label>
+        <input type="checkbox" [name]="'metric_' + item.metric"
+          [checked]="preferences().visibleMetrics.includes(item.metric)" (change)="preview(form)">
+        {{ item.label }}
+      </label>
+    }
+  </fieldset>
+  <fieldset [disabled]="busy()">
+    <legend>Local data</legend>
+    <label><input type="checkbox" name="collectionEnabled" [checked]="preferences().collectionEnabled"> Enable report collection</label>
+    <label>
+      Retain report history
+      <select name="retentionDays" [value]="preferences().retentionDays">
+        @for (days of ranges; track days) { <option [value]="days">{{ days }} days</option> }
+      </select>
+    </label>
+    <label><input type="checkbox" name="allowExport" [checked]="preferences().allowExport"> Allow report export</label>
+    <label><input type="checkbox" name="allowClearHistory" [checked]="preferences().allowClearHistory"> Allow clearing report history</label>
+  </fieldset>
+  <button praxisButton type="submit" [disabled]="busy()">Save report preferences</button>
+</form>

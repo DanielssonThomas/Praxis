@@ -1,2 +1,5 @@
 <h1>Settings</h1>
-<p role="status">Portable settings are unavailable in this desktop build.</p>
+<p role="status">{{ status() }}</p>
+@if (settings(); as current) {
+  <praxis-settings-form [settings]="current" [busy]="busy()" (submitted)="save($event)" />
+}

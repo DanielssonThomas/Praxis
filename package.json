@@ -23,6 +23,7 @@
     "test:desktop-ipc-drift": "node apps/desktop/scripts/ipc-bindings.mjs test-drift",
     "package:desktop": "npm run package:native --workspace @praxis/desktop",
     "test:desktop:live": "node --test tests/runtime/desktop-launch.live.mjs",
+    "test:desktop:reports-settings": "node --test tests/runtime/desktop-reports-settings.live.mjs",
     "test:browser": "node --test tests/browser/shell.browser.mjs",
     "test:hermes": "node --test tests/runtime/hermes.live.mjs",
     "test:mcp:live": "node --test tests/runtime/mcp.live.mjs",

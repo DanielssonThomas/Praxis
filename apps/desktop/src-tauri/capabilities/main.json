@@ -3,5 +3,15 @@
   "identifier": "main",
   "description": "Local host launch status and retry in the primary Praxis window.",
   "windows": ["main"],
-  "permissions": ["allow-host-status", "allow-retry-host"]
+  "permissions": [
+    "allow-host-status",
+    "allow-retry-host",
+    "allow-unlock-reports",
+    "allow-lock-reports",
+    "allow-read-reports",
+    "allow-save-report-preferences",
+    "allow-clear-report-history",
+    "allow-read-settings",
+    "allow-save-settings"
+  ]
 }
