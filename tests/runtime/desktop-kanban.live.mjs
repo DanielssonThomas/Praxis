@@ -72,7 +72,7 @@ test("the packaged Kanban follows live native states and saves one scoped GitHub
     } finally {
       provider.closeAllConnections();
       await new Promise((resolve) => provider.close(resolve));
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 3 });
     }
   });
 
