@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
-          fetch-depth: 2
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
@@ -27,13 +27,12 @@ jobs:
       - name: Select tracked source and prepare evidence
         run: |
           set -euo pipefail
-          source=$(git rev-parse HEAD^)
+          source=77465deaab77f39cc92889801bdb7f95e73c5b2f
           git checkout --detach "$source"
           mkdir -p "$RUNNER_TEMP/praxis-57-evidence"
           {
             echo "CARGO_TARGET_DIR=$RUNNER_TEMP/praxis-57-cargo"
             echo "PRAXIS_DESKTOP_EVIDENCE_DIR=$RUNNER_TEMP/praxis-57-evidence"
-            echo "PRAXIS_HERMES_BIN=$RUNNER_TEMP/praxis-hermes-venv/bin/hermes"
           } >> "$GITHUB_ENV"
           {
             echo "Praxis source revision $source"
@@ -56,7 +55,8 @@ jobs:
           if git diff --exit-code -- apps/desktop/src/generated/desktop-ipc.ts > "$PRAXIS_DESKTOP_EVIDENCE_DIR/bindings.diff"; then
             echo "Checked-in generated bindings match." | tee "$PRAXIS_DESKTOP_EVIDENCE_DIR/bindings-state.txt"
           else
-            echo "Bootstrap run generated a candidate export. Commit it before exact-source acceptance." | tee "$PRAXIS_DESKTOP_EVIDENCE_DIR/bindings-state.txt"
+            echo "Checked-in bindings differ from Rust." | tee "$PRAXIS_DESKTOP_EVIDENCE_DIR/bindings-state.txt"
+            exit 1
           fi
       - name: Build and package the application
         run: |
@@ -106,6 +106,7 @@ jobs:
           "$uv" python install 3.14.10
           UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/praxis-hermes-venv" "$uv" sync --frozen --project "$source" \
             --python 3.14.10 --extra messaging --extra mcp --no-dev
+          echo "PRAXIS_HERMES_BIN=$RUNNER_TEMP/praxis-hermes-venv/bin/hermes" >> "$GITHUB_ENV"
       - name: Observe packaged Kanban and native Hermes
         run: |
           set -euo pipefail
